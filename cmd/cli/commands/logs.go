@@ -83,7 +83,7 @@ func showExecutionDetails(client *cli.Client, executionID string) {
 }
 
 func listExecutions(client *cli.Client) {
-	fmt.Println("📋 Fetching executions...\n")
+	fmt.Println("📋 Fetching executions...")
 
 	executions, err := client.GetExecutions(workflowFilter)
 	if err != nil {

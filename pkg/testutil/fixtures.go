@@ -27,12 +27,7 @@ func (fb *FixtureBuilder) Workflow(overrides ...func(*models.Workflow)) *models.
 		Name:        "Test Workflow",
 		Description: StringPtr("Test workflow description"),
 		Definition: models.WorkflowDefinition{
-			WorkflowID:  "test-workflow",
-			Version:     "1.0.0",
-			Name:        "Test Workflow",
-			Description: "Test workflow description",
-			Enabled:     true,
-			Trigger: models.Trigger{
+			Trigger: models.TriggerDefinition{
 				Type:  "event",
 				Event: "order.created",
 			},
@@ -40,7 +35,6 @@ func (fb *FixtureBuilder) Workflow(overrides ...func(*models.Workflow)) *models.
 				{
 					ID:   "step1",
 					Type: "condition",
-					Name: "Check order total",
 					Condition: &models.Condition{
 						Field:    "order.total",
 						Operator: "gt",
@@ -50,22 +44,26 @@ func (fb *FixtureBuilder) Workflow(overrides ...func(*models.Workflow)) *models.
 					OnFalse: "step3",
 				},
 				{
-					ID:     "step2",
-					Type:   "action",
-					Action: "block",
+					ID:   "step2",
+					Type: "action",
+					Action: &models.Action{
+						Type:   "block",
+						Reason: "High value order",
+					},
 					Execute: []models.ExecuteAction{
 						{
-							Type:    "notify",
-							Channel: "email",
+							Type:       "notify",
 							Recipients: []string{"admin@example.com"},
-							Message: "High value order blocked",
+							Message:    "High value order blocked",
 						},
 					},
 				},
 				{
-					ID:     "step3",
-					Type:   "action",
-					Action: "allow",
+					ID:   "step3",
+					Type: "action",
+					Action: &models.Action{
+						Type: "allow",
+					},
 				},
 			},
 		},
@@ -82,20 +80,20 @@ func (fb *FixtureBuilder) Workflow(overrides ...func(*models.Workflow)) *models.
 }
 
 // Execution creates a test execution
-func (fb *FixtureBuilder) Execution(workflowID uuid.UUID, overrides ...func(*models.Execution)) *models.Execution {
+func (fb *FixtureBuilder) Execution(workflowID uuid.UUID, overrides ...func(*models.WorkflowExecution)) *models.WorkflowExecution {
 	id := uuid.New()
 	now := time.Now()
 
-	execution := &models.Execution{
+	execution := &models.WorkflowExecution{
 		ID:          id,
 		ExecutionID: "exec-" + id.String()[:8],
 		WorkflowID:  workflowID,
 		TriggerEvent: "order.created",
-		TriggerPayload: map[string]interface{}{
+		TriggerPayload: models.JSONB{
 			"order_id": "order-123",
 			"total":    1500.00,
 		},
-		Context: map[string]interface{}{
+		Context: models.JSONB{
 			"order": map[string]interface{}{
 				"id":    "order-123",
 				"total": 1500.00,
@@ -147,10 +145,15 @@ func (fb *FixtureBuilder) Rule(overrides ...func(*models.Rule)) *models.Rule {
 		RuleID:      "rule-" + id.String()[:8],
 		Name:        "Test Rule",
 		Description: StringPtr("Test rule description"),
-		Condition: models.Condition{
-			Field:    "order.total",
-			Operator: "gt",
-			Value:    1000.0,
+		RuleType:    models.RuleTypeCondition,
+		Definition: models.RuleDefinition{
+			Conditions: []models.Condition{
+				{
+					Field:    "order.total",
+					Operator: "gt",
+					Value:    1000.0,
+				},
+			},
 		},
 		Enabled:   true,
 		CreatedAt: now,
@@ -174,7 +177,7 @@ func (fb *FixtureBuilder) StepExecution(executionID uuid.UUID, overrides ...func
 		ExecutionID: executionID,
 		StepID:      "step1",
 		StepType:    "condition",
-		Status:      models.ExecutionStatusRunning,
+		Status:      models.StepStatusRunning,
 		StartedAt:   now,
 	}
 
