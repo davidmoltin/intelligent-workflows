@@ -14,6 +14,7 @@ type Handlers struct {
 	Event     *EventHandler
 	Execution *ExecutionHandler
 	Approval  *ApprovalHandler
+	AI        *AIHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -29,13 +30,21 @@ func NewHandlers(
 	executionRepo *postgres.ExecutionRepository,
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
+	aiService *services.AIService,
 	healthCheckers *HealthCheckers,
 ) *Handlers {
+	// Handle AI handler initialization
+	var aiHandler *AIHandler
+	if aiService != nil {
+		aiHandler = NewAIHandler(aiService, log.Logger)
+	}
+
 	return &Handlers{
 		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis),
 		Workflow:  NewWorkflowHandler(log, workflowRepo),
 		Event:     NewEventHandler(log, eventRouter),
 		Execution: NewExecutionHandler(log, executionRepo),
 		Approval:  NewApprovalHandler(log, approvalService),
+		AI:        aiHandler,
 	}
 }

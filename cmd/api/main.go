@@ -15,7 +15,11 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/database"
+	"github.com/davidmoltin/intelligent-workflows/pkg/llm"
+	"github.com/davidmoltin/intelligent-workflows/pkg/llm/providers/anthropic"
+	"github.com/davidmoltin/intelligent-workflows/pkg/llm/providers/openai"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -69,6 +73,49 @@ func run() error {
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
+	// Initialize LLM client (if configured)
+	var aiService *services.AIService
+	if cfg.LLM.APIKey != "" {
+		llmConfig := &llm.Config{
+			Provider:     llm.Provider(cfg.LLM.Provider),
+			APIKey:       cfg.LLM.APIKey,
+			DefaultModel: cfg.LLM.DefaultModel,
+			Timeout:      cfg.LLM.Timeout,
+			MaxRetries:   cfg.LLM.MaxRetries,
+			RetryDelay:   cfg.LLM.RetryDelay,
+			BaseURL:      cfg.LLM.BaseURL,
+		}
+
+		var llmClient llm.Client
+		switch llm.Provider(cfg.LLM.Provider) {
+		case llm.ProviderAnthropic:
+			llmClient, err = anthropic.NewClient(llmConfig)
+		case llm.ProviderOpenAI:
+			llmClient, err = openai.NewClient(llmConfig)
+		default:
+			log.Warn("Unknown LLM provider, AI features will be disabled",
+				logger.String("provider", cfg.LLM.Provider))
+		}
+
+		if err != nil {
+			log.Warn("Failed to initialize LLM client, AI features will be disabled",
+				zap.Error(err),
+				logger.String("provider", cfg.LLM.Provider))
+		} else if llmClient != nil {
+			aiService, err = services.NewAIService(llmClient, log.Logger)
+			if err != nil {
+				log.Warn("Failed to initialize AI service, AI features will be disabled",
+					zap.Error(err))
+			} else {
+				log.Info("AI service initialized",
+					logger.String("provider", string(llmClient.GetProvider())))
+				defer aiService.Close()
+			}
+		}
+	} else {
+		log.Info("LLM API key not configured, AI features will be disabled")
+	}
+
 	// Initialize services
 	approvalService := services.NewApprovalService(approvalRepo, log)
 
@@ -79,6 +126,7 @@ func run() error {
 		executionRepo,
 		eventRouter,
 		approvalService,
+		aiService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,

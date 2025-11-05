@@ -14,6 +14,7 @@ type Config struct {
 	Redis    RedisConfig
 	Logger   LoggerConfig
 	App      AppConfig
+	LLM      LLMConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -59,6 +60,17 @@ type AppConfig struct {
 	Name        string
 }
 
+// LLMConfig holds LLM provider configuration
+type LLMConfig struct {
+	Provider     string
+	APIKey       string
+	DefaultModel string
+	Timeout      time.Duration
+	MaxRetries   int
+	RetryDelay   time.Duration
+	BaseURL      string
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -94,6 +106,15 @@ func Load() (*Config, error) {
 			Environment: getEnv("APP_ENV", "development"),
 			Version:     getEnv("APP_VERSION", "0.1.0"),
 			Name:        getEnv("APP_NAME", "intelligent-workflows"),
+		},
+		LLM: LLMConfig{
+			Provider:     getEnv("LLM_PROVIDER", "anthropic"),
+			APIKey:       getEnv("LLM_API_KEY", ""),
+			DefaultModel: getEnv("LLM_DEFAULT_MODEL", ""),
+			Timeout:      getEnvAsDuration("LLM_TIMEOUT", 60*time.Second),
+			MaxRetries:   getEnvAsInt("LLM_MAX_RETRIES", 3),
+			RetryDelay:   getEnvAsDuration("LLM_RETRY_DELAY", 1*time.Second),
+			BaseURL:      getEnv("LLM_BASE_URL", ""),
 		},
 	}
 

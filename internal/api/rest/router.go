@@ -84,6 +84,15 @@ func (r *Router) SetupRoutes() {
 			router.Post("/{id}/approve", r.handlers.Approval.ApproveRequest)
 			router.Post("/{id}/reject", r.handlers.Approval.RejectRequest)
 		})
+
+		// AI endpoints (only if AI service is configured)
+		if r.handlers.AI != nil {
+			router.Route("/ai", func(router chi.Router) {
+				router.Post("/chat", r.handlers.AI.Chat)
+				router.Get("/capabilities", r.handlers.AI.GetCapabilities)
+				router.Post("/interpret", r.handlers.AI.InterpretWorkflow)
+			})
+		}
 	})
 }
 
