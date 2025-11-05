@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useWorkflows, useDeleteWorkflow } from '@/api/hooks'
 import { Button } from '@/components/ui/button'
@@ -18,18 +19,28 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Edit, Eye } from 'lucide-react'
+import { DeleteWorkflowDialog } from '@/components/DeleteWorkflowDialog'
 
 export function WorkflowsPage() {
   const { data: workflows, isLoading, error } = useWorkflows()
   const deleteWorkflow = useDeleteWorkflow()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [workflowToDelete, setWorkflowToDelete] = useState<{ id: string; name: string } | null>(null)
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this workflow?')) {
-      try {
-        await deleteWorkflow.mutateAsync(id)
-      } catch (error) {
-        console.error('Failed to delete workflow:', error)
-      }
+  const handleDeleteClick = (id: string, name: string) => {
+    setWorkflowToDelete({ id, name })
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!workflowToDelete) return
+
+    try {
+      await deleteWorkflow.mutateAsync(workflowToDelete.id)
+      setDeleteDialogOpen(false)
+      setWorkflowToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete workflow:', error)
     }
   }
 
@@ -168,7 +179,7 @@ export function WorkflowsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(workflow.id)}
+                          onClick={() => handleDeleteClick(workflow.id, workflow.name)}
                           disabled={deleteWorkflow.isPending}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -182,6 +193,17 @@ export function WorkflowsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Dialog */}
+      {workflowToDelete && (
+        <DeleteWorkflowDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          workflowName={workflowToDelete.name}
+          onConfirm={handleDeleteConfirm}
+          isDeleting={deleteWorkflow.isPending}
+        />
+      )}
     </div>
   )
 }
