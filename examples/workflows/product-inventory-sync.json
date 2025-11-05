@@ -1,0 +1,203 @@
+{
+  "workflow_id": "product_inventory_sync",
+  "version": "1.0.0",
+  "name": "Product Inventory Synchronization",
+  "description": "Sync inventory across warehouses and prevent overselling",
+  "enabled": true,
+  "tags": ["product", "inventory", "warehouse"],
+  "trigger": {
+    "type": "event",
+    "event": "product.inventory.changed"
+  },
+  "context": {
+    "load": [
+      "product.details",
+      "product.inventory_all_warehouses",
+      "product.pending_orders",
+      "product.reorder_settings"
+    ]
+  },
+  "steps": [
+    {
+      "id": "calculate_available_inventory",
+      "type": "execute",
+      "name": "Calculate total available inventory",
+      "action": "function",
+      "function": "sum",
+      "params": {
+        "values": "{{product.inventory_all_warehouses.*.quantity}}"
+      },
+      "output_var": "total_available"
+    },
+    {
+      "id": "calculate_reserved_inventory",
+      "type": "execute",
+      "name": "Calculate reserved inventory from pending orders",
+      "action": "function",
+      "function": "sum",
+      "params": {
+        "values": "{{product.pending_orders.*.quantity}}"
+      },
+      "output_var": "total_reserved"
+    },
+    {
+      "id": "calculate_sellable_inventory",
+      "type": "execute",
+      "name": "Calculate sellable inventory",
+      "action": "function",
+      "function": "subtract",
+      "params": {
+        "a": "{{total_available}}",
+        "b": "{{total_reserved}}"
+      },
+      "output_var": "sellable_quantity"
+    },
+    {
+      "id": "check_low_stock",
+      "type": "condition",
+      "name": "Check if inventory is below reorder point",
+      "condition": {
+        "field": "sellable_quantity",
+        "operator": "lte",
+        "value": "{{product.reorder_settings.reorder_point}}"
+      },
+      "on_true": "trigger_reorder",
+      "on_false": "check_oversell_risk"
+    },
+    {
+      "id": "trigger_reorder",
+      "type": "action",
+      "name": "Trigger automatic reorder",
+      "action": "execute",
+      "execute": [
+        {
+          "type": "webhook",
+          "url": "{{integrations.erp.webhook_url}}",
+          "method": "POST",
+          "body": {
+            "event": "reorder_required",
+            "product_id": "{{product.id}}",
+            "product_sku": "{{product.sku}}",
+            "current_quantity": "{{sellable_quantity}}",
+            "reorder_quantity": "{{product.reorder_settings.reorder_quantity}}",
+            "supplier_id": "{{product.reorder_settings.preferred_supplier}}"
+          }
+        },
+        {
+          "type": "create_record",
+          "entity": "purchase_order",
+          "fields": {
+            "product_id": "{{product.id}}",
+            "quantity": "{{product.reorder_settings.reorder_quantity}}",
+            "supplier_id": "{{product.reorder_settings.preferred_supplier}}",
+            "status": "draft",
+            "created_by": "workflow_automation"
+          }
+        },
+        {
+          "type": "notify",
+          "channel": "email",
+          "recipients": ["role:inventory_manager"],
+          "template": "low_stock_alert",
+          "data": {
+            "product_name": "{{product.name}}",
+            "product_sku": "{{product.sku}}",
+            "current_quantity": "{{sellable_quantity}}",
+            "reorder_point": "{{product.reorder_settings.reorder_point}}"
+          }
+        }
+      ],
+      "next": "check_oversell_risk"
+    },
+    {
+      "id": "check_oversell_risk",
+      "type": "condition",
+      "name": "Check if there's risk of overselling",
+      "condition": {
+        "field": "sellable_quantity",
+        "operator": "lte",
+        "value": 0
+      },
+      "on_true": "prevent_overselling",
+      "on_false": "update_inventory_status"
+    },
+    {
+      "id": "prevent_overselling",
+      "type": "action",
+      "name": "Block further sales of this product",
+      "action": "execute",
+      "execute": [
+        {
+          "type": "update_record",
+          "entity": "product",
+          "entity_id": "{{product.id}}",
+          "fields": {
+            "available_for_sale": false,
+            "out_of_stock": true,
+            "updated_at": "{{now}}",
+            "updated_by": "workflow_automation"
+          }
+        },
+        {
+          "type": "webhook",
+          "url": "{{integrations.storefront.webhook_url}}",
+          "method": "POST",
+          "body": {
+            "event": "product_out_of_stock",
+            "product_id": "{{product.id}}",
+            "product_sku": "{{product.sku}}"
+          }
+        },
+        {
+          "type": "notify",
+          "channel": "slack",
+          "recipients": ["#inventory-alerts"],
+          "message": "⚠️ Product {{product.sku}} - {{product.name}} is now OUT OF STOCK"
+        }
+      ],
+      "next": "allow_workflow"
+    },
+    {
+      "id": "update_inventory_status",
+      "type": "action",
+      "name": "Update product inventory status",
+      "action": "execute",
+      "execute": [
+        {
+          "type": "update_record",
+          "entity": "product",
+          "entity_id": "{{product.id}}",
+          "fields": {
+            "available_quantity": "{{sellable_quantity}}",
+            "available_for_sale": true,
+            "out_of_stock": false,
+            "updated_at": "{{now}}",
+            "low_stock": "{{sellable_quantity <= product.reorder_settings.reorder_point}}"
+          }
+        },
+        {
+          "type": "webhook",
+          "url": "{{integrations.storefront.webhook_url}}",
+          "method": "POST",
+          "body": {
+            "event": "product_inventory_updated",
+            "product_id": "{{product.id}}",
+            "product_sku": "{{product.sku}}",
+            "available_quantity": "{{sellable_quantity}}"
+          }
+        }
+      ],
+      "next": "allow_workflow"
+    },
+    {
+      "id": "allow_workflow",
+      "type": "action",
+      "name": "Complete workflow successfully",
+      "action": "allow",
+      "metadata": {
+        "final_inventory": "{{sellable_quantity}}",
+        "actions_taken": ["inventory_synced"]
+      }
+    }
+  ]
+}

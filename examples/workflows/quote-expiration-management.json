@@ -1,0 +1,205 @@
+{
+  "workflow_id": "quote_expiration_management",
+  "version": "1.0.0",
+  "name": "Quote Expiration Management",
+  "description": "Manage quote lifecycle with reminders and automatic expiration",
+  "enabled": true,
+  "tags": ["quote", "expiration", "lifecycle"],
+  "trigger": {
+    "type": "schedule",
+    "schedule": "0 */6 * * *",
+    "description": "Run every 6 hours"
+  },
+  "context": {
+    "load": [
+      "quotes.active",
+      "quotes.pending_approval"
+    ]
+  },
+  "steps": [
+    {
+      "id": "get_expiring_quotes",
+      "type": "execute",
+      "name": "Fetch quotes expiring soon",
+      "action": "query",
+      "query": {
+        "entity": "quote",
+        "filters": [
+          {
+            "field": "status",
+            "operator": "in",
+            "value": ["sent", "pending"]
+          },
+          {
+            "field": "expires_at",
+            "operator": "between",
+            "value": ["{{now}}", "{{now + 48h}}"]
+          }
+        ]
+      },
+      "output_var": "expiring_quotes"
+    },
+    {
+      "id": "process_each_quote",
+      "type": "foreach",
+      "name": "Process each expiring quote",
+      "items": "{{expiring_quotes}}",
+      "item_var": "quote",
+      "steps": [
+        {
+          "id": "calculate_hours_remaining",
+          "type": "execute",
+          "name": "Calculate hours until expiration",
+          "action": "function",
+          "function": "date_diff",
+          "params": {
+            "start": "{{now}}",
+            "end": "{{quote.expires_at}}",
+            "unit": "hours"
+          },
+          "output_var": "hours_remaining"
+        },
+        {
+          "id": "check_reminder_needed",
+          "type": "condition",
+          "name": "Check if reminder should be sent",
+          "condition": {
+            "and": [
+              {
+                "field": "hours_remaining",
+                "operator": "lte",
+                "value": 24
+              },
+              {
+                "field": "quote.reminder_sent",
+                "operator": "eq",
+                "value": false
+              }
+            ]
+          },
+          "on_true": "send_reminder",
+          "on_false": "check_expired"
+        },
+        {
+          "id": "send_reminder",
+          "type": "action",
+          "name": "Send expiration reminder",
+          "action": "execute",
+          "execute": [
+            {
+              "type": "notify",
+              "channel": "email",
+              "recipients": ["{{quote.customer_email}}"],
+              "cc": ["{{quote.sales_rep_email}}"],
+              "template": "quote_expiring_soon",
+              "data": {
+                "quote_number": "{{quote.number}}",
+                "customer_name": "{{quote.customer_name}}",
+                "expires_at": "{{quote.expires_at}}",
+                "hours_remaining": "{{hours_remaining}}",
+                "quote_url": "{{quote.public_url}}"
+              }
+            },
+            {
+              "type": "update_record",
+              "entity": "quote",
+              "entity_id": "{{quote.id}}",
+              "fields": {
+                "reminder_sent": true,
+                "reminder_sent_at": "{{now}}"
+              }
+            },
+            {
+              "type": "notify",
+              "channel": "slack",
+              "recipients": ["#sales-notifications"],
+              "message": "📧 Expiration reminder sent for Quote {{quote.number}} - {{hours_remaining}}h remaining"
+            }
+          ],
+          "next": "check_expired"
+        },
+        {
+          "id": "check_expired",
+          "type": "condition",
+          "name": "Check if quote has expired",
+          "condition": {
+            "field": "hours_remaining",
+            "operator": "lte",
+            "value": 0
+          },
+          "on_true": "expire_quote",
+          "on_false": "continue_monitoring"
+        },
+        {
+          "id": "expire_quote",
+          "type": "action",
+          "name": "Mark quote as expired",
+          "action": "execute",
+          "execute": [
+            {
+              "type": "update_record",
+              "entity": "quote",
+              "entity_id": "{{quote.id}}",
+              "fields": {
+                "status": "expired",
+                "expired_at": "{{now}}"
+              }
+            },
+            {
+              "type": "notify",
+              "channel": "email",
+              "recipients": ["{{quote.sales_rep_email}}"],
+              "template": "quote_expired",
+              "data": {
+                "quote_number": "{{quote.number}}",
+                "customer_name": "{{quote.customer_name}}",
+                "quote_total": "{{quote.total}}",
+                "expired_at": "{{now}}"
+              }
+            },
+            {
+              "type": "webhook",
+              "url": "{{integrations.crm.webhook_url}}",
+              "method": "POST",
+              "body": {
+                "event": "quote_expired",
+                "quote_id": "{{quote.id}}",
+                "quote_number": "{{quote.number}}",
+                "customer_id": "{{quote.customer_id}}",
+                "sales_rep_id": "{{quote.sales_rep_id}}"
+              }
+            },
+            {
+              "type": "create_record",
+              "entity": "task",
+              "fields": {
+                "title": "Follow up on expired quote {{quote.number}}",
+                "description": "Quote {{quote.number}} for {{quote.customer_name}} has expired. Follow up to see if customer is still interested.",
+                "assigned_to": "{{quote.sales_rep_id}}",
+                "due_date": "{{now + 24h}}",
+                "priority": "medium",
+                "related_entity": "quote",
+                "related_entity_id": "{{quote.id}}"
+              }
+            }
+          ]
+        },
+        {
+          "id": "continue_monitoring",
+          "type": "action",
+          "name": "Continue monitoring quote",
+          "action": "allow"
+        }
+      ]
+    },
+    {
+      "id": "complete_workflow",
+      "type": "action",
+      "name": "Complete workflow",
+      "action": "allow",
+      "metadata": {
+        "quotes_processed": "{{expiring_quotes.length}}"
+      }
+    }
+  ]
+}
