@@ -1,0 +1,101 @@
+{
+  "workflow_id": "high_value_order_approval",
+  "version": "1.0.0",
+  "name": "High Value Order Approval",
+  "description": "Require manager approval for orders exceeding $10,000",
+  "enabled": true,
+  "tags": ["orders", "approval", "high-value"],
+  "trigger": {
+    "type": "event",
+    "event": "order.checkout.initiated"
+  },
+  "context": {
+    "load": [
+      "order.details",
+      "customer.profile",
+      "customer.order_history",
+      "customer.credit_limit"
+    ]
+  },
+  "steps": [
+    {
+      "id": "check_order_value",
+      "type": "condition",
+      "name": "Check if order exceeds threshold",
+      "condition": {
+        "field": "order.total",
+        "operator": "gte",
+        "value": 10000
+      },
+      "on_true": "check_customer_tier",
+      "on_false": "allow_order"
+    },
+    {
+      "id": "check_customer_tier",
+      "type": "condition",
+      "name": "Check if customer is VIP",
+      "condition": {
+        "field": "customer.tier",
+        "operator": "in",
+        "value": ["platinum", "gold"]
+      },
+      "on_true": "allow_order",
+      "on_false": "require_approval"
+    },
+    {
+      "id": "require_approval",
+      "type": "action",
+      "name": "Block order and request approval",
+      "action": "block",
+      "reason": "Order requires manager approval for amounts over $10,000",
+      "metadata": {
+        "approval_required": true,
+        "approver_role": "sales_manager",
+        "priority": "high",
+        "auto_expire": "24h"
+      },
+      "execute": [
+        {
+          "type": "create_approval_request",
+          "entity": "order",
+          "entity_id": "{{order.id}}",
+          "approver_role": "sales_manager",
+          "expires_in": "24h",
+          "metadata": {
+            "customer_name": "{{customer.name}}",
+            "order_total": "{{order.total}}",
+            "order_items_count": "{{order.items.length}}"
+          }
+        },
+        {
+          "type": "notify",
+          "channel": "email",
+          "recipients": ["role:sales_manager"],
+          "template": "order_approval_required",
+          "data": {
+            "order_id": "{{order.id}}",
+            "customer_name": "{{customer.name}}",
+            "order_total": "{{order.total}}",
+            "approval_link": "{{approval_url}}"
+          }
+        },
+        {
+          "type": "notify",
+          "channel": "slack",
+          "recipients": ["#sales-approvals"],
+          "message": "🚨 Order {{order.id}} requires approval - ${{order.total}} from {{customer.name}}"
+        }
+      ]
+    },
+    {
+      "id": "allow_order",
+      "type": "action",
+      "name": "Allow order to proceed",
+      "action": "allow",
+      "metadata": {
+        "approved_by": "workflow",
+        "reason": "Within automatic approval limits"
+      }
+    }
+  ]
+}
