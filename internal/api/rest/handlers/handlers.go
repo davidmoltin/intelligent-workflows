@@ -14,6 +14,7 @@ type Handlers struct {
 	Event     *EventHandler
 	Execution *ExecutionHandler
 	Approval  *ApprovalHandler
+	Auth      *AuthHandler
 	AI        *AIHandler
 }
 
@@ -30,6 +31,7 @@ func NewHandlers(
 	executionRepo *postgres.ExecutionRepository,
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
+	authService *services.AuthService,
 	aiService *services.AIService,
 	healthCheckers *HealthCheckers,
 ) *Handlers {
@@ -45,6 +47,7 @@ func NewHandlers(
 		Event:     NewEventHandler(log, eventRouter),
 		Execution: NewExecutionHandler(log, executionRepo),
 		Approval:  NewApprovalHandler(log, approvalService),
+		Auth:      NewAuthHandler(log, authService),
 		AI:        aiHandler,
 	}
 }

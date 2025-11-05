@@ -20,17 +20,33 @@ type ApprovalRepository interface {
 	GetApprovalsByExecution(ctx context.Context, executionID uuid.UUID) ([]models.ApprovalRequest, error)
 }
 
+// WorkflowResumer defines interface for resuming workflows
+type WorkflowResumer interface {
+	ResumeWorkflow(ctx context.Context, executionID uuid.UUID, approved bool) error
+}
+
 // ApprovalService handles approval workflow logic
 type ApprovalService struct {
-	approvalRepo ApprovalRepository
-	logger       *logger.Logger
+	approvalRepo       ApprovalRepository
+	logger             *logger.Logger
+	notificationSvc    *NotificationService
+	workflowResumer    WorkflowResumer
+	defaultApproverEmail string
 }
 
 // NewApprovalService creates a new approval service
-func NewApprovalService(approvalRepo ApprovalRepository, log *logger.Logger) *ApprovalService {
+func NewApprovalService(
+	approvalRepo ApprovalRepository,
+	log *logger.Logger,
+	notificationSvc *NotificationService,
+	workflowResumer WorkflowResumer,
+) *ApprovalService {
 	return &ApprovalService{
-		approvalRepo: approvalRepo,
-		logger:       log,
+		approvalRepo:       approvalRepo,
+		logger:             log,
+		notificationSvc:    notificationSvc,
+		workflowResumer:    workflowResumer,
+		defaultApproverEmail: "approver@example.com", // TODO: Make this configurable
 	}
 }
 
@@ -72,8 +88,15 @@ func (s *ApprovalService) CreateApprovalRequest(
 
 	s.logger.Infof("Approval request created: %s", approval.RequestID)
 
-	// TODO: Send notification to approver(s)
-	// This would integrate with notification service
+	// Send notification to approver(s)
+	if s.notificationSvc != nil {
+		// In a real implementation, we would look up the approver email based on the role
+		// For now, we'll use a default email or configured approver
+		if err := s.notificationSvc.SendApprovalRequestNotification(ctx, approval, s.defaultApproverEmail); err != nil {
+			// Log error but don't fail the approval creation
+			s.logger.Errorf("Failed to send approval notification: %v", err)
+		}
+	}
 
 	return approval, nil
 }
@@ -116,8 +139,21 @@ func (s *ApprovalService) ApproveRequest(
 
 	s.logger.Infof("Approval request approved: %s", approval.RequestID)
 
-	// TODO: Trigger event or resume workflow execution
-	// This would notify the workflow engine to continue execution
+	// Resume workflow execution
+	if s.workflowResumer != nil {
+		if err := s.workflowResumer.ResumeWorkflow(ctx, approval.ExecutionID, true); err != nil {
+			s.logger.Errorf("Failed to resume workflow after approval: %v", err)
+			// Note: Approval is already saved, so we return the approval but log the error
+		}
+	}
+
+	// Send notification about approval decision
+	if s.notificationSvc != nil {
+		requesterEmail := s.defaultApproverEmail // In real implementation, look up requester email
+		if err := s.notificationSvc.SendApprovalDecisionNotification(ctx, approval, requesterEmail); err != nil {
+			s.logger.Errorf("Failed to send approval decision notification: %v", err)
+		}
+	}
 
 	return approval, nil
 }
@@ -160,8 +196,21 @@ func (s *ApprovalService) RejectRequest(
 
 	s.logger.Infof("Approval request rejected: %s", approval.RequestID)
 
-	// TODO: Trigger event or update workflow execution
-	// This would notify the workflow engine that the request was rejected
+	// Resume workflow execution with rejection status
+	if s.workflowResumer != nil {
+		if err := s.workflowResumer.ResumeWorkflow(ctx, approval.ExecutionID, false); err != nil {
+			s.logger.Errorf("Failed to resume workflow after rejection: %v", err)
+			// Note: Approval is already saved, so we return the approval but log the error
+		}
+	}
+
+	// Send notification about rejection decision
+	if s.notificationSvc != nil {
+		requesterEmail := s.defaultApproverEmail // In real implementation, look up requester email
+		if err := s.notificationSvc.SendApprovalDecisionNotification(ctx, approval, requesterEmail); err != nil {
+			s.logger.Errorf("Failed to send rejection notification: %v", err)
+		}
+	}
 
 	return approval, nil
 }
@@ -219,6 +268,14 @@ func (s *ApprovalService) ExpireOldApprovals(ctx context.Context) error {
 
 			expiredCount++
 			s.logger.Infof("Approval expired: %s", approval.RequestID)
+
+			// Send expiration notification
+			if s.notificationSvc != nil {
+				requesterEmail := s.defaultApproverEmail // In real implementation, look up requester email
+				if err := s.notificationSvc.SendApprovalDecisionNotification(ctx, &approval, requesterEmail); err != nil {
+					s.logger.Errorf("Failed to send expiration notification for %s: %v", approval.RequestID, err)
+				}
+			}
 		}
 	}
 
