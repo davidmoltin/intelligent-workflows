@@ -1,0 +1,123 @@
+# Multi-stage Dockerfile for Backend + Frontend
+
+# Stage 1: Build Frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/web
+
+# Copy frontend package files
+COPY web/package*.json ./
+
+# Install frontend dependencies
+RUN npm ci --only=production
+
+# Copy frontend source
+COPY web/ ./
+
+# Build frontend for production
+RUN npm run build
+
+# Stage 2: Build Backend
+FROM golang:1.21-alpine AS backend-builder
+
+# Install build dependencies
+RUN apk add --no-cache git make
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download Go dependencies
+RUN go mod download
+
+# Copy backend source code
+COPY . .
+
+# Build the Go application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o api ./cmd/api
+
+# Stage 3: Final Runtime Image
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates nginx
+
+WORKDIR /root/
+
+# Copy backend binary from builder
+COPY --from=backend-builder /app/api .
+
+# Copy database migrations
+COPY --from=backend-builder /app/migrations ./migrations
+
+# Copy frontend build from frontend-builder
+COPY --from=frontend-builder /app/web/dist ./web/dist
+
+# Create nginx configuration for serving frontend and proxying API
+RUN mkdir -p /etc/nginx/http.d && \
+    rm -f /etc/nginx/http.d/default.conf
+
+# Create nginx config
+RUN echo 'server {' > /etc/nginx/http.d/default.conf && \
+    echo '    listen 80;' >> /etc/nginx/http.d/default.conf && \
+    echo '    server_name _;' >> /etc/nginx/http.d/default.conf && \
+    echo '' >> /etc/nginx/http.d/default.conf && \
+    echo '    # Frontend static files' >> /etc/nginx/http.d/default.conf && \
+    echo '    location / {' >> /etc/nginx/http.d/default.conf && \
+    echo '        root /root/web/dist;' >> /etc/nginx/http.d/default.conf && \
+    echo '        try_files $uri $uri/ /index.html;' >> /etc/nginx/http.d/default.conf && \
+    echo '        expires 1d;' >> /etc/nginx/http.d/default.conf && \
+    echo '        add_header Cache-Control "public, immutable";' >> /etc/nginx/http.d/default.conf && \
+    echo '    }' >> /etc/nginx/http.d/default.conf && \
+    echo '' >> /etc/nginx/http.d/default.conf && \
+    echo '    # API proxy' >> /etc/nginx/http.d/default.conf && \
+    echo '    location /api/ {' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_pass http://localhost:8080/;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_http_version 1.1;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header Upgrade $http_upgrade;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header Connection "upgrade";' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header Host $host;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header X-Real-IP $remote_addr;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> /etc/nginx/http.d/default.conf && \
+    echo '        proxy_set_header X-Forwarded-Proto $scheme;' >> /etc/nginx/http.d/default.conf && \
+    echo '    }' >> /etc/nginx/http.d/default.conf && \
+    echo '' >> /etc/nginx/http.d/default.conf && \
+    echo '    # Health check endpoint' >> /etc/nginx/http.d/default.conf && \
+    echo '    location /health {' >> /etc/nginx/http.d/default.conf && \
+    echo '        access_log off;' >> /etc/nginx/http.d/default.conf && \
+    echo '        return 200 "healthy\n";' >> /etc/nginx/http.d/default.conf && \
+    echo '        add_header Content-Type text/plain;' >> /etc/nginx/http.d/default.conf && \
+    echo '    }' >> /etc/nginx/http.d/default.conf && \
+    echo '}' >> /etc/nginx/http.d/default.conf
+
+# Create startup script
+RUN echo '#!/bin/sh' > /root/start.sh && \
+    echo 'set -e' >> /root/start.sh && \
+    echo '' >> /root/start.sh && \
+    echo '# Start the API server in the background' >> /root/start.sh && \
+    echo 'echo "Starting API server..."' >> /root/start.sh && \
+    echo './api &' >> /root/start.sh && \
+    echo 'API_PID=$!' >> /root/start.sh && \
+    echo '' >> /root/start.sh && \
+    echo '# Start nginx in the foreground' >> /root/start.sh && \
+    echo 'echo "Starting nginx..."' >> /root/start.sh && \
+    echo 'nginx -g "daemon off;" &' >> /root/start.sh && \
+    echo 'NGINX_PID=$!' >> /root/start.sh && \
+    echo '' >> /root/start.sh && \
+    echo '# Wait for any process to exit' >> /root/start.sh && \
+    echo 'wait -n' >> /root/start.sh && \
+    echo '' >> /root/start.sh && \
+    echo '# Exit with status of process that exited first' >> /root/start.sh && \
+    echo 'exit $?' >> /root/start.sh && \
+    chmod +x /root/start.sh
+
+# Expose ports (80 for nginx, 8080 for direct API access if needed)
+EXPOSE 80 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+
+# Run the startup script
+CMD ["/root/start.sh"]

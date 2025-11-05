@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
+	"github.com/davidmoltin/intelligent-workflows/internal/workers"
 	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/database"
@@ -73,6 +75,15 @@ func run() error {
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
+	// Initialize notification service
+	notificationService, err := services.NewNotificationService(&cfg.Notification, log)
+	if err != nil {
+		return fmt.Errorf("failed to initialize notification service: %w", err)
+	}
+
+	// Initialize workflow resumer
+	workflowResumer := services.NewWorkflowResumer(log)
+
 	// Initialize JWT manager
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -82,8 +93,14 @@ func run() error {
 	jwtManager := auth.NewJWTManager(jwtSecret)
 
 	// Initialize services
-	approvalService := services.NewApprovalService(approvalRepo, log)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer)
 	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
+
+	// Initialize and start approval expiration worker
+	expirationWorker := workers.NewApprovalExpirationWorker(approvalService, log, 5*time.Minute)
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	expirationWorker.Start(workerCtx)
 
 	// Initialize handlers
 	h := handlers.NewHandlers(
@@ -129,6 +146,9 @@ func run() error {
 		return fmt.Errorf("server error: %w", err)
 	case sig := <-shutdown:
 		log.Info("Shutdown signal received", logger.String("signal", sig.String()))
+
+		// Stop background workers first
+		expirationWorker.Stop()
 
 		// Give outstanding requests a deadline for completion
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
