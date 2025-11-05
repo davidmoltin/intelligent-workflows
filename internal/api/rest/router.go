@@ -65,11 +65,25 @@ func (r *Router) SetupRoutes() {
 			router.Post("/{id}/disable", r.handlers.Workflow.Disable)
 		})
 
-		// TODO: Add more routes as features are implemented
-		// - Executions
-		// - Rules
-		// - Events
-		// - Approvals
+		// Events
+		router.Route("/events", func(router chi.Router) {
+			router.Post("/", r.handlers.Event.CreateEvent)
+		})
+
+		// Executions
+		router.Route("/executions", func(router chi.Router) {
+			router.Get("/", r.handlers.Execution.ListExecutions)
+			router.Get("/{id}", r.handlers.Execution.GetExecution)
+			router.Get("/{id}/trace", r.handlers.Execution.GetExecutionTrace)
+		})
+
+		// Approvals
+		router.Route("/approvals", func(router chi.Router) {
+			router.Get("/", r.handlers.Approval.ListApprovals)
+			router.Get("/{id}", r.handlers.Approval.GetApproval)
+			router.Post("/{id}/approve", r.handlers.Approval.ApproveRequest)
+			router.Post("/{id}/reject", r.handlers.Approval.RejectRequest)
+		})
 	})
 }
 

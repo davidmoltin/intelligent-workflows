@@ -36,7 +36,7 @@ func (h *WorkflowHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	workflow, err := h.repo.Create(r.Context(), &req, nil)
 	if err != nil {
-		h.logger.Error("Failed to create workflow", logger.Err(err))
+		h.logger.Errorf("Failed to create workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to create workflow")
 		return
 	}
@@ -55,7 +55,7 @@ func (h *WorkflowHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	workflow, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		h.logger.Error("Failed to get workflow", logger.Err(err))
+		h.logger.Errorf("Failed to get workflow", logger.Err(err))
 		h.respondError(w, http.StatusNotFound, "Workflow not found")
 		return
 	}
@@ -93,7 +93,7 @@ func (h *WorkflowHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workflows, total, err := h.repo.List(r.Context(), enabled, limit, offset)
 	if err != nil {
-		h.logger.Error("Failed to list workflows", logger.Err(err))
+		h.logger.Errorf("Failed to list workflows", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to list workflows")
 		return
 	}
@@ -126,7 +126,7 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	workflow, err := h.repo.Update(r.Context(), id, &req)
 	if err != nil {
-		h.logger.Error("Failed to update workflow", logger.Err(err))
+		h.logger.Errorf("Failed to update workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to update workflow")
 		return
 	}
@@ -144,7 +144,7 @@ func (h *WorkflowHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), id); err != nil {
-		h.logger.Error("Failed to delete workflow", logger.Err(err))
+		h.logger.Errorf("Failed to delete workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to delete workflow")
 		return
 	}
@@ -162,7 +162,7 @@ func (h *WorkflowHandler) Enable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.SetEnabled(r.Context(), id, true); err != nil {
-		h.logger.Error("Failed to enable workflow", logger.Err(err))
+		h.logger.Errorf("Failed to enable workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to enable workflow")
 		return
 	}
@@ -180,7 +180,7 @@ func (h *WorkflowHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.SetEnabled(r.Context(), id, false); err != nil {
-		h.logger.Error("Failed to disable workflow", logger.Err(err))
+		h.logger.Errorf("Failed to disable workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to disable workflow")
 		return
 	}

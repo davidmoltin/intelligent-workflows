@@ -1,14 +1,19 @@
 package handlers
 
 import (
+	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
+	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 )
 
 // Handlers aggregates all HTTP handlers
 type Handlers struct {
-	Health   *HealthHandler
-	Workflow *WorkflowHandler
+	Health    *HealthHandler
+	Workflow  *WorkflowHandler
+	Event     *EventHandler
+	Execution *ExecutionHandler
+	Approval  *ApprovalHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -21,10 +26,16 @@ type HealthCheckers struct {
 func NewHandlers(
 	log *logger.Logger,
 	workflowRepo *postgres.WorkflowRepository,
+	executionRepo *postgres.ExecutionRepository,
+	eventRouter *engine.EventRouter,
+	approvalService *services.ApprovalService,
 	healthCheckers *HealthCheckers,
 ) *Handlers {
 	return &Handlers{
-		Health:   NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis),
-		Workflow: NewWorkflowHandler(log, workflowRepo),
+		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis),
+		Workflow:  NewWorkflowHandler(log, workflowRepo),
+		Event:     NewEventHandler(log, eventRouter),
+		Execution: NewExecutionHandler(log, executionRepo),
+		Approval:  NewApprovalHandler(log, approvalService),
 	}
 }

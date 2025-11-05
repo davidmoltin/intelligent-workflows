@@ -148,3 +148,26 @@ func Any(key string, value interface{}) zap.Field {
 func Err(err error) zap.Field {
 	return zap.Error(err)
 }
+
+// Printf-style logging methods for convenience
+// These methods accept format strings and arguments
+
+func (l *Logger) Debugf(format string, args ...interface{}) {
+	l.Sugar().Debugf(format, args...)
+}
+
+func (l *Logger) Infof(format string, args ...interface{}) {
+	l.Sugar().Infof(format, args...)
+}
+
+func (l *Logger) Warnf(format string, args ...interface{}) {
+	l.Sugar().Warnf(format, args...)
+}
+
+func (l *Logger) Errorf(format string, args ...interface{}) {
+	l.Sugar().Errorf(format, args...)
+}
+
+func (l *Logger) Fatalf(format string, args ...interface{}) {
+	l.Sugar().Fatalf(format, args...)
+}

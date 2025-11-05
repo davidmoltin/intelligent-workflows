@@ -1,5 +1,10 @@
-.PHONY: help build run test clean docker-up docker-down migrate-up migrate-down \
-        docker-restart docker-stop monitoring-up monitoring-down k8s-deploy k8s-delete
+.PHONY: help build run test test-unit test-integration test-e2e test-all test-load clean \
+        docker-up docker-down docker-build docker-logs docker-restart docker-stop docker-rebuild docker-clean \
+        migrate-up migrate-down mocks \
+        monitoring-up monitoring-down monitoring-logs \
+        k8s-validate k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-delete k8s-status k8s-logs \
+        health ready db-shell db-console db-backup db-restore redis-cli \
+        deps fmt lint dev dev-full ci security-scan tag metrics dashboards
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -15,12 +20,39 @@ run: ## Run the API server locally
 	@echo "Running API server..."
 	@go run ./cmd/api
 
-test: ## Run tests
-	@echo "Running tests..."
-	@go test -v -race -coverprofile=coverage.out ./...
+test: test-unit ## Run unit tests
 
-test-coverage: test ## Run tests and show coverage
-	@go tool cover -html=coverage.out
+test-unit: ## Run unit tests
+	@echo "Running unit tests..."
+	@go test -v -race -coverprofile=coverage.out ./internal/... ./pkg/...
+
+test-integration: ## Run integration tests
+	@echo "Running integration tests..."
+	@echo "Ensure PostgreSQL and Redis are running (make docker-up)"
+	@INTEGRATION_TESTS=1 go test -v ./tests/integration/...
+
+test-e2e: ## Run E2E tests
+	@echo "Running E2E tests..."
+	@echo "Ensure PostgreSQL and Redis are running (make docker-up)"
+	@E2E_TESTS=1 go test -v ./tests/e2e/...
+
+test-all: ## Run all tests
+	@echo "Running all tests..."
+	@bash ./scripts/test-all.sh
+
+test-coverage: ## Generate test coverage report
+	@echo "Generating coverage report..."
+	@bash ./scripts/test-coverage.sh
+
+test-load: ## Run load tests
+	@echo "Running load tests with k6..."
+	@command -v k6 >/dev/null 2>&1 || { echo "k6 is not installed. Install from https://k6.io/docs/getting-started/installation/"; exit 1; }
+	@k6 run tests/load/k6-workflow-load.js
+
+mocks: ## Generate mocks
+	@echo "Generating mocks..."
+	@command -v mockery >/dev/null 2>&1 || { echo "mockery is not installed. Install with: go install github.com/vektra/mockery/v2@latest"; exit 1; }
+	@mockery
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
