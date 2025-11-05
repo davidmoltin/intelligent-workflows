@@ -45,16 +45,16 @@ type ContextDefinition struct {
 
 // Step represents a workflow step
 type Step struct {
-	ID       string                 `json:"id"`
-	Type     string                 `json:"type"` // condition, action, parallel, execute, wait
-	Condition *Condition            `json:"condition,omitempty"`
-	Action    *Action               `json:"action,omitempty"`
+	ID        string                 `json:"id"`
+	Type      string                 `json:"type"` // condition, action, parallel, execute, wait
+	Condition *Condition             `json:"condition,omitempty"`
+	Action    *Action                `json:"action,omitempty"`
 	OnTrue    string                 `json:"on_true,omitempty"`
 	OnFalse   string                 `json:"on_false,omitempty"`
-	Parallel  *ParallelStep         `json:"parallel,omitempty"`
-	Execute   []ExecuteAction       `json:"execute,omitempty"`
-	Wait      *WaitConfig           `json:"wait,omitempty"`
-	Retry     *RetryConfig          `json:"retry,omitempty"`
+	Parallel  *ParallelStep          `json:"parallel,omitempty"`
+	Execute   []ExecuteAction        `json:"execute,omitempty"`
+	Wait      *WaitConfig            `json:"wait,omitempty"`
+	Retry     *RetryConfig           `json:"retry,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 

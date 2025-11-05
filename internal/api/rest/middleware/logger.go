@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 

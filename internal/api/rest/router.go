@@ -3,12 +3,12 @@ package rest
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
 	customMiddleware "github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 // Router holds the HTTP router and dependencies

@@ -8,13 +8,13 @@ import (
 
 // Event represents an event that triggers workflows
 type Event struct {
-	ID                 uuid.UUID `json:"id" db:"id"`
-	EventID            string    `json:"event_id" db:"event_id"`
-	EventType          string    `json:"event_type" db:"event_type"`
-	Source             string    `json:"source" db:"source"`
-	Payload            JSONB     `json:"payload" db:"payload"`
-	TriggeredWorkflows []string  `json:"triggered_workflows,omitempty" db:"triggered_workflows"`
-	ReceivedAt         time.Time `json:"received_at" db:"received_at"`
+	ID                 uuid.UUID  `json:"id" db:"id"`
+	EventID            string     `json:"event_id" db:"event_id"`
+	EventType          string     `json:"event_type" db:"event_type"`
+	Source             string     `json:"source" db:"source"`
+	Payload            JSONB      `json:"payload" db:"payload"`
+	TriggeredWorkflows []string   `json:"triggered_workflows,omitempty" db:"triggered_workflows"`
+	ReceivedAt         time.Time  `json:"received_at" db:"received_at"`
 	ProcessedAt        *time.Time `json:"processed_at,omitempty" db:"processed_at"`
 }
 

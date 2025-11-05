@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
