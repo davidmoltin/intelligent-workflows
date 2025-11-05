@@ -27,6 +27,7 @@ type WorkflowExecutor struct {
 	contextBuilder  *ContextBuilder
 	actionExecutor  *ActionExecutor
 	executionRepo   ExecutionRepository
+	workflowRepo    WorkflowRepository
 	logger          *logger.Logger
 	maxRetries      int
 	defaultTimeout  time.Duration
@@ -36,6 +37,7 @@ type WorkflowExecutor struct {
 func NewWorkflowExecutor(
 	redis *redis.Client,
 	executionRepo ExecutionRepository,
+	workflowRepo WorkflowRepository,
 	log *logger.Logger,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
@@ -43,6 +45,7 @@ func NewWorkflowExecutor(
 		contextBuilder:  NewContextBuilder(redis, log),
 		actionExecutor:  NewActionExecutor(log),
 		executionRepo:   executionRepo,
+		workflowRepo:    workflowRepo,
 		logger:          log,
 		maxRetries:      3,
 		defaultTimeout:  30 * time.Second,
@@ -447,17 +450,155 @@ func (we *WorkflowExecutor) isRetryableError(err error, retryOn []string) bool {
 }
 
 // ResumeExecution resumes a paused workflow execution
-// TODO: Phase 3 - Implement full resume logic with step continuation
 func (we *WorkflowExecutor) ResumeExecution(ctx context.Context, execution *models.WorkflowExecution) error {
-	we.logger.Infof("Resume execution requested for %s (resume count: %d)", execution.ID, execution.ResumeCount)
+	we.logger.Infof("Resuming execution %s (resume count: %d)", execution.ID, execution.ResumeCount)
 
-	// TODO: Phase 3 implementation will:
-	// 1. Load the workflow definition
-	// 2. Find the next step to execute (from next_step_id or paused_step_id)
-	// 3. Restore execution context from resume_data
-	// 4. Continue workflow execution from the paused step
-	// 5. Handle approval decisions from resume_data
+	// Validate execution state
+	if execution.Status != models.ExecutionStatusRunning {
+		return fmt.Errorf("execution must be in running state to resume (current: %s)", execution.Status)
+	}
 
-	we.logger.Warn("ResumeExecution not yet fully implemented - placeholder for Phase 3")
-	return fmt.Errorf("resume execution not yet implemented")
+	// Load workflow definition
+	workflow, err := we.workflowRepo.GetWorkflowByID(ctx, execution.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("failed to load workflow: %w", err)
+	}
+
+	// Restore execution context from resume_data
+	execContext := make(map[string]interface{})
+	if execution.Context != nil {
+		execContext = execution.Context
+	}
+
+	// Merge resume data into context (e.g., approval decision)
+	if execution.ResumeData != nil {
+		for key, value := range execution.ResumeData {
+			execContext[key] = value
+		}
+	}
+
+	// Determine where to resume from
+	var startStepID string
+	if execution.NextStepID != nil {
+		// Resume from the next step
+		startStepID = execution.NextStepID.String()
+		we.logger.Infof("Resuming from next step: %s", startStepID)
+	} else if execution.PausedStepID != nil {
+		// Re-execute the paused step (e.g., after approval)
+		startStepID = execution.PausedStepID.String()
+		we.logger.Infof("Re-executing paused step: %s", startStepID)
+	} else {
+		// No specific step, start from the beginning
+		if len(workflow.Definition.Steps) > 0 {
+			startStepID = workflow.Definition.Steps[0].ID
+		}
+		we.logger.Warn("No paused/next step specified, starting from beginning")
+	}
+
+	// Continue execution from the specified step
+	result, err := we.continueFromStep(ctx, execution, workflow, execContext, startStepID)
+	if err != nil {
+		we.logger.Errorf("Failed to resume workflow execution: %v", err)
+		we.completeExecution(ctx, execution, models.ExecutionResultFailed, err.Error())
+		return err
+	}
+
+	// Complete execution successfully
+	we.completeExecution(ctx, execution, result, "")
+	we.logger.Infof("Workflow execution resumed and completed: %s - Result: %s", execution.ExecutionID, result)
+
+	return nil
+}
+
+// PauseCurrentExecution pauses the current workflow execution
+func (we *WorkflowExecutor) PauseCurrentExecution(
+	ctx context.Context,
+	execution *models.WorkflowExecution,
+	reason string,
+	pausedStepID string,
+	nextStepID string,
+) error {
+	we.logger.Infof("Pausing execution %s at step %s: %s", execution.ID, pausedStepID, reason)
+
+	now := time.Now()
+	execution.Status = models.ExecutionStatusPaused
+	execution.PausedAt = &now
+	execution.PausedReason = &reason
+
+	if pausedStepID != "" {
+		pausedID := uuid.MustParse(pausedStepID)
+		execution.PausedStepID = &pausedID
+	}
+
+	if nextStepID != "" {
+		nextID := uuid.MustParse(nextStepID)
+		execution.NextStepID = &nextID
+	}
+
+	// Store current context in resume_data
+	if execution.ResumeData == nil {
+		execution.ResumeData = make(models.JSONB)
+	}
+	execution.ResumeData["paused_context"] = execution.Context
+
+	// Update execution in database
+	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+		return fmt.Errorf("failed to pause execution: %w", err)
+	}
+
+	we.logger.Infof("Successfully paused execution %s", execution.ID)
+	return nil
+}
+
+// continueFromStep continues workflow execution from a specific step
+func (we *WorkflowExecutor) continueFromStep(
+	ctx context.Context,
+	execution *models.WorkflowExecution,
+	workflow *models.Workflow,
+	execContext map[string]interface{},
+	startStepID string,
+) (models.ExecutionResult, error) {
+	// Build step map for navigation
+	stepMap := make(map[string]*models.Step)
+	for i := range workflow.Definition.Steps {
+		step := &workflow.Definition.Steps[i]
+		stepMap[step.ID] = step
+	}
+
+	// Validate start step exists
+	if startStepID != "" {
+		if _, exists := stepMap[startStepID]; !exists {
+			return models.ExecutionResultFailed, fmt.Errorf("start step not found: %s", startStepID)
+		}
+	}
+
+	currentStepID := startStepID
+	var finalResult models.ExecutionResult = models.ExecutionResultExecuted
+
+	// Execute steps from the specified start point
+	for currentStepID != "" {
+		step, exists := stepMap[currentStepID]
+		if !exists {
+			return models.ExecutionResultFailed, fmt.Errorf("step not found: %s", currentStepID)
+		}
+
+		we.logger.Infof("Executing step: %s (type: %s)", step.ID, step.Type)
+
+		// Execute step with retry logic
+		nextStepID, result, err := we.executeStepWithRetry(ctx, execution, step, execContext)
+		if err != nil {
+			return models.ExecutionResultFailed, fmt.Errorf("step %s failed: %w", step.ID, err)
+		}
+
+		// Update final result based on action result
+		if result != nil && result.Action == "block" {
+			finalResult = models.ExecutionResultBlocked
+		} else if result != nil && result.Action == "allow" {
+			finalResult = models.ExecutionResultAllowed
+		}
+
+		currentStepID = nextStepID
+	}
+
+	return finalResult, nil
 }

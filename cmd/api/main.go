@@ -72,7 +72,7 @@ func run() error {
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
