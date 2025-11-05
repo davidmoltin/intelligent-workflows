@@ -57,6 +57,13 @@ func (r *Router) SetupRoutes() {
 
 	// API v1
 	r.router.Route("/api/v1", func(router chi.Router) {
+		// API Documentation (public)
+		router.Route("/docs", func(router chi.Router) {
+			router.Get("/", r.handlers.Docs.RedirectToDocs)
+			router.Get("/ui", r.handlers.Docs.ServeSwaggerUI)
+			router.Get("/openapi.yaml", r.handlers.Docs.ServeOpenAPISpec)
+		})
+
 		// Auth endpoints (public)
 		router.Route("/auth", func(router chi.Router) {
 			router.Post("/register", r.handlers.Auth.Register)
