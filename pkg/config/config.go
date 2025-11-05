@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 			User:            getEnv("DB_USER", "postgres"),
 			Password:        getEnv("DB_PASSWORD", "postgres"),
 			Database:        getEnv("DB_NAME", "workflows"),
-			SSLMode:         getEnv("DB_SSL_MODE", "disable"),
+			SSLMode:         getEnv("DB_SSL_MODE", "require"), // Default to require for security
 			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getEnvAsDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute),

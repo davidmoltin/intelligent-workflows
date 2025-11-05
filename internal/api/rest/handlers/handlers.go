@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
@@ -41,4 +45,38 @@ func NewHandlers(
 		Approval:  NewApprovalHandler(log, approvalService),
 		Auth:      NewAuthHandler(log, authService),
 	}
+}
+
+// Common error types for safe error handling
+var (
+	ErrInvalidRequest    = errors.New("invalid request")
+	ErrUnauthorized      = errors.New("unauthorized")
+	ErrForbidden         = errors.New("forbidden")
+	ErrNotFound          = errors.New("not found")
+	ErrConflict          = errors.New("resource already exists")
+	ErrInternalError     = errors.New("internal server error")
+	ErrServiceUnavailable = errors.New("service unavailable")
+)
+
+// ErrorResponse represents an API error response
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message,omitempty"`
+}
+
+// RespondError sends a safe error response without leaking internal details
+func RespondError(w http.ResponseWriter, statusCode int, publicMsg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   http.StatusText(statusCode),
+		Message: publicMsg,
+	})
+}
+
+// RespondJSON sends a JSON response
+func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data)
 }

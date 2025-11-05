@@ -59,7 +59,9 @@ func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 
 	// Check database
 	if err := h.db.HealthCheck(ctx); err != nil {
-		checks["database"] = "unhealthy: " + err.Error()
+		// Log detailed error internally
+		h.logger.Errorf("Database health check failed: %v", err)
+		checks["database"] = "unhealthy"
 		allHealthy = false
 	} else {
 		checks["database"] = "healthy"
@@ -67,7 +69,9 @@ func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 
 	// Check Redis
 	if err := h.redis.HealthCheck(ctx); err != nil {
-		checks["redis"] = "unhealthy: " + err.Error()
+		// Log detailed error internally
+		h.logger.Errorf("Redis health check failed: %v", err)
+		checks["redis"] = "unhealthy"
 		allHealthy = false
 	} else {
 		checks["redis"] = "healthy"

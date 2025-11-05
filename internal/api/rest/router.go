@@ -2,6 +2,8 @@ package rest
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
 	customMiddleware "github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
@@ -31,13 +33,36 @@ func NewRouter(log *logger.Logger, h *handlers.Handlers, authService *services.A
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 
-	// CORS
+	// Security middleware
+	r.Use(customMiddleware.SecurityHeaders())
+	r.Use(customMiddleware.RequestSizeLimit(customMiddleware.GetMaxRequestSize()))
+
+	// CORS - Configure allowed origins from environment
+	allowedOrigins := []string{"http://localhost:3000"} // Default for development
+	if originsEnv := os.Getenv("ALLOWED_ORIGINS"); originsEnv != "" {
+		allowedOrigins = strings.Split(originsEnv, ",")
+		// Trim whitespace from each origin
+		for i := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+		}
+	}
+
+	// Security: Never allow "*" with credentials enabled
+	allowCredentials := true
+	for _, origin := range allowedOrigins {
+		if origin == "*" {
+			log.Warn("CORS: Wildcard origin '*' detected with credentials enabled. Disabling credentials for security.")
+			allowCredentials = false
+			break
+		}
+	}
+
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"}, // TODO: Configure from environment
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		ExposedHeaders:   []string{"Link", "X-Request-ID"},
+		AllowCredentials: allowCredentials,
 		MaxAge:           300,
 	}))
 

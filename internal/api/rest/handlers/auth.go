@@ -38,7 +38,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authService.Register(r.Context(), &req)
 	if err != nil {
 		h.logger.Errorf("Failed to register user", logger.Err(err))
-		h.respondError(w, http.StatusBadRequest, err.Error())
+		// Don't leak internal error details
+		h.respondError(w, http.StatusBadRequest, "Failed to register user")
 		return
 	}
 
@@ -144,7 +145,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.authService.ChangePassword(r.Context(), claims.UserID, &req); err != nil {
 		h.logger.Errorf("Failed to change password", logger.Err(err))
-		h.respondError(w, http.StatusBadRequest, err.Error())
+		// Don't leak internal error details
+		h.respondError(w, http.StatusBadRequest, "Failed to change password")
 		return
 	}
 
