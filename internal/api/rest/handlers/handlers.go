@@ -15,6 +15,7 @@ type Handlers struct {
 	Execution *ExecutionHandler
 	Approval  *ApprovalHandler
 	Auth      *AuthHandler
+	Docs      *DocsHandler
 	AI        *AIHandler
 }
 
@@ -48,6 +49,7 @@ func NewHandlers(
 		Execution: NewExecutionHandler(log, executionRepo),
 		Approval:  NewApprovalHandler(log, approvalService),
 		Auth:      NewAuthHandler(log, authService),
+		Docs:      NewDocsHandler(),
 		AI:        aiHandler,
 	}
 }
