@@ -1,0 +1,15 @@
+# Mockery configuration file
+# Generate mocks with: mockery
+
+with-expecter: true
+dir: "{{.InterfaceDir}}"
+outpkg: mocks
+filename: "{{.InterfaceName}}.go"
+output: "internal/mocks/{{.PackageName}}"
+packages:
+  github.com/davidmoltin/intelligent-workflows/internal/repository:
+    interfaces:
+      WorkflowRepository:
+      ExecutionRepository:
+      EventRepository:
+      RuleRepository:
