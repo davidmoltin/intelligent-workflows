@@ -61,6 +61,15 @@ func (we *WorkflowExecutor) Execute(
 ) (*models.WorkflowExecution, error) {
 	we.logger.Infof("Starting workflow execution: %s (ID: %s)", workflow.Name, workflow.ID)
 
+	// Apply workflow-level timeout
+	var cancel context.CancelFunc
+	timeout := we.parseTimeout(workflow.Definition.Timeout, we.defaultTimeout)
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+		we.logger.Infof("Workflow timeout set to: %v", timeout)
+	}
+
 	// Create execution record
 	execution := &models.WorkflowExecution{
 		ID:             uuid.New(),
@@ -71,6 +80,14 @@ func (we *WorkflowExecutor) Execute(
 		Status:         models.ExecutionStatusRunning,
 		StartedAt:      time.Now(),
 		Metadata:       make(models.JSONB),
+	}
+
+	// Set timeout fields if timeout is configured
+	if timeout > 0 {
+		timeoutAt := execution.StartedAt.Add(timeout)
+		execution.TimeoutAt = &timeoutAt
+		timeoutSecs := int(timeout.Seconds())
+		execution.TimeoutDuration = &timeoutSecs
 	}
 
 	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
@@ -100,6 +117,14 @@ func (we *WorkflowExecutor) Execute(
 		if err == ErrExecutionPaused {
 			we.logger.Infof("Workflow execution paused: %s", execution.ExecutionID)
 			return execution, nil
+		}
+
+		// Check for timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			we.logger.Errorf("Workflow execution timed out: %s", execution.ExecutionID)
+			timeoutMsg := fmt.Sprintf("Workflow execution timed out after %v", timeout)
+			we.completeExecution(context.Background(), execution, models.ExecutionResultFailed, timeoutMsg)
+			return execution, fmt.Errorf("%s: %w", timeoutMsg, ctx.Err())
 		}
 
 		we.logger.Errorf("Workflow execution failed: %v", err)
@@ -175,6 +200,18 @@ func (we *WorkflowExecutor) executeStepWithRetry(
 	var lastErr error
 	maxAttempts := 1
 
+	// Apply step-level timeout if configured
+	stepCtx := ctx
+	var cancel context.CancelFunc
+	if step.Timeout != "" {
+		timeout := we.parseTimeout(step.Timeout, 0)
+		if timeout > 0 {
+			stepCtx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+			we.logger.Infof("Step %s timeout set to: %v", step.ID, timeout)
+		}
+	}
+
 	// Check if step has retry configuration
 	if step.Retry != nil && step.Retry.MaxAttempts > 0 {
 		maxAttempts = step.Retry.MaxAttempts
@@ -189,9 +226,14 @@ func (we *WorkflowExecutor) executeStepWithRetry(
 			time.Sleep(backoff)
 		}
 
-		nextStepID, result, err := we.executeStep(ctx, execution, step, execContext)
+		nextStepID, result, err := we.executeStep(stepCtx, execution, step, execContext)
 		if err == nil {
 			return nextStepID, result, nil
+		}
+
+		// Check for step timeout
+		if stepCtx.Err() == context.DeadlineExceeded {
+			return "", nil, fmt.Errorf("step %s timed out: %w", step.ID, stepCtx.Err())
 		}
 
 		lastErr = err
@@ -651,6 +693,27 @@ func (we *WorkflowExecutor) isRetryableError(err error, retryOn []string) bool {
 	}
 
 	return false
+}
+
+// parseTimeout parses a timeout string (e.g., "5m", "30s", "1h") and returns a duration
+// Returns defaultTimeout if timeoutStr is empty or invalid
+func (we *WorkflowExecutor) parseTimeout(timeoutStr string, defaultTimeout time.Duration) time.Duration {
+	if timeoutStr == "" {
+		return defaultTimeout
+	}
+
+	duration, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		we.logger.Warnf("Invalid timeout format '%s', using default: %v", timeoutStr, defaultTimeout)
+		return defaultTimeout
+	}
+
+	if duration <= 0 {
+		we.logger.Warnf("Timeout must be positive, got %v, using default: %v", duration, defaultTimeout)
+		return defaultTimeout
+	}
+
+	return duration
 }
 
 // ResumePausedExecution resumes a paused workflow execution
