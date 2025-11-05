@@ -1,0 +1,147 @@
+export interface Workflow {
+  id: string
+  workflow_id: string
+  version: string
+  name: string
+  description?: string
+  definition: WorkflowDefinition
+  enabled: boolean
+  created_at: string
+  updated_at: string
+  tags?: string[]
+}
+
+export interface WorkflowDefinition {
+  workflow_id: string
+  version: string
+  name: string
+  description?: string
+  enabled: boolean
+  trigger: Trigger
+  context?: ContextConfig
+  steps: Step[]
+}
+
+export interface Trigger {
+  type: 'event' | 'schedule' | 'manual'
+  event?: string
+  schedule?: string
+}
+
+export interface ContextConfig {
+  load?: string[]
+}
+
+export interface Step {
+  id: string
+  type: 'condition' | 'action' | 'execute' | 'parallel' | 'foreach'
+  name?: string
+  condition?: Condition
+  action?: Action
+  execute?: ExecuteAction[]
+  on_true?: string
+  on_false?: string
+  next?: string
+  metadata?: Record<string, any>
+  steps?: Step[]
+  strategy?: string
+  retry?: RetryConfig
+}
+
+export interface Condition {
+  field?: string
+  operator?: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains'
+  value?: any
+  and?: Condition[]
+  or?: Condition[]
+  not?: Condition
+}
+
+export interface Action {
+  action: 'allow' | 'block' | 'execute'
+  reason?: string
+}
+
+export interface ExecuteAction {
+  type: 'notify' | 'webhook' | 'create_record' | 'update_record'
+  config?: Record<string, any>
+}
+
+export interface RetryConfig {
+  max_attempts?: number
+  backoff?: string
+  retry_on?: string[]
+}
+
+export interface Execution {
+  id: string
+  execution_id: string
+  workflow_id: string
+  trigger_event: string
+  trigger_payload: Record<string, any>
+  context?: Record<string, any>
+  status: ExecutionStatus
+  result?: ExecutionResult
+  started_at: string
+  completed_at?: string
+  duration_ms?: number
+  error_message?: string
+  steps?: StepExecution[]
+}
+
+export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'blocked'
+export type ExecutionResult = 'allowed' | 'blocked' | 'executed'
+
+export interface StepExecution {
+  id: string
+  execution_id: string
+  step_id: string
+  step_type: string
+  status: ExecutionStatus
+  result?: any
+  started_at: string
+  completed_at?: string
+  duration_ms?: number
+  error_message?: string
+}
+
+export interface ApprovalRequest {
+  id: string
+  request_id: string
+  execution_id: string
+  entity_type: string
+  entity_id: string
+  requester_id: string
+  approver_role: string
+  approver_id?: string
+  status: ApprovalStatus
+  reason: string
+  decision_reason?: string
+  requested_at: string
+  decided_at?: string
+  expires_at?: string
+}
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired'
+
+export interface CreateWorkflowRequest {
+  workflow_id: string
+  version: string
+  name: string
+  description?: string
+  definition: WorkflowDefinition
+  tags?: string[]
+}
+
+export interface UpdateWorkflowRequest {
+  name?: string
+  description?: string
+  definition?: WorkflowDefinition
+  tags?: string[]
+}
+
+export interface IngestEventRequest {
+  event_type: string
+  source: string
+  payload: Record<string, any>
+}
