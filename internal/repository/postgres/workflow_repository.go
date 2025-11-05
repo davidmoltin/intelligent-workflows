@@ -234,3 +234,24 @@ func (r *WorkflowRepository) SetEnabled(ctx context.Context, id uuid.UUID, enabl
 
 	return nil
 }
+
+// GetWorkflowByID is an alias for GetByID to match the engine interface
+func (r *WorkflowRepository) GetWorkflowByID(ctx context.Context, id uuid.UUID) (*models.Workflow, error) {
+	return r.GetByID(ctx, id)
+}
+
+// ListWorkflows is an adapter for List to match the engine interface
+func (r *WorkflowRepository) ListWorkflows(ctx context.Context, enabled *bool, limit, offset int) ([]models.Workflow, int64, error) {
+	workflows, total, err := r.List(ctx, enabled, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Convert []*models.Workflow to []models.Workflow
+	result := make([]models.Workflow, len(workflows))
+	for i, w := range workflows {
+		result[i] = *w
+	}
+
+	return result, total, nil
+}
