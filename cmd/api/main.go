@@ -107,6 +107,10 @@ func run() error {
 	defer cancelWorker()
 	expirationWorker.Start(workerCtx)
 
+	// Initialize and start workflow resumer worker
+	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, 1*time.Minute)
+	resumerWorker.Start(workerCtx)
+
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
@@ -115,6 +119,7 @@ func run() error {
 		eventRouter,
 		approvalService,
 		authService,
+		workflowResumer,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,

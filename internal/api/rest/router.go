@@ -128,9 +128,15 @@ func (r *Router) SetupRoutes() {
 
 			// Executions
 			router.Route("/executions", func(router chi.Router) {
+				// List and read operations
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/", r.handlers.Execution.ListExecutions)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/paused", r.handlers.Execution.ListPausedExecutions)
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/{id}", r.handlers.Execution.GetExecution)
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/{id}/trace", r.handlers.Execution.GetExecutionTrace)
+
+				// Control operations
+				router.With(customMiddleware.RequirePermission("execution:cancel", r.logger)).Post("/{id}/pause", r.handlers.Execution.PauseExecution)
+				router.With(customMiddleware.RequirePermission("execution:cancel", r.logger)).Post("/{id}/resume", r.handlers.Execution.ResumeExecution)
 			})
 
 			// Approvals

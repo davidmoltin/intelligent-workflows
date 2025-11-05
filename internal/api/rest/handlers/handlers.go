@@ -35,13 +35,14 @@ func NewHandlers(
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
 	authService *services.AuthService,
+	workflowResumer *services.WorkflowResumerImpl,
 	healthCheckers *HealthCheckers,
 ) *Handlers {
 	return &Handlers{
 		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis),
 		Workflow:  NewWorkflowHandler(log, workflowRepo),
 		Event:     NewEventHandler(log, eventRouter),
-		Execution: NewExecutionHandler(log, executionRepo),
+		Execution: NewExecutionHandler(log, executionRepo, workflowResumer),
 		Approval:  NewApprovalHandler(log, approvalService),
 		Auth:      NewAuthHandler(log, authService),
 	}
