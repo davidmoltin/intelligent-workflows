@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: workflows-api
+  namespace: intelligent-workflows
+  labels:
+    app: workflows-api
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: workflows-api
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+  namespaceSelector:
+    matchNames:
+      - intelligent-workflows

@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: intelligent-workflows-staging
+
+bases:
+  - ../../base
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+replicas:
+  - name: workflows-api
+    count: 2
+
+images:
+  - name: ghcr.io/davidmoltin/intelligent-workflows
+    newTag: staging
+
+configMapGenerator:
+  - name: workflows-api-config
+    behavior: merge
+    literals:
+      - APP_ENV=staging
+      - LOG_LEVEL=info

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: intelligent-workflows
+  labels:
+    name: intelligent-workflows
+    environment: production
