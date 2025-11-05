@@ -13,6 +13,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
+	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/database"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -64,13 +65,25 @@ func run() error {
 	executionRepo := postgres.NewExecutionRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	userRepo := postgres.NewUserRepository(db.DB)
+	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
+	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 
 	// Initialize workflow engine components
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
+	// Initialize JWT manager
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "default-secret-change-this-in-production" // Default for development
+		log.Warn("JWT_SECRET not set, using default (not secure for production)")
+	}
+	jwtManager := auth.NewJWTManager(jwtSecret)
+
 	// Initialize services
 	approvalService := services.NewApprovalService(approvalRepo, log)
+	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
 
 	// Initialize handlers
 	h := handlers.NewHandlers(
@@ -79,6 +92,7 @@ func run() error {
 		executionRepo,
 		eventRouter,
 		approvalService,
+		authService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,
@@ -86,7 +100,7 @@ func run() error {
 	)
 
 	// Initialize router
-	router := rest.NewRouter(log, h)
+	router := rest.NewRouter(log, h, authService)
 	router.SetupRoutes()
 
 	// Create HTTP server
