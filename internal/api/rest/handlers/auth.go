@@ -9,6 +9,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -35,6 +36,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	user, err := h.authService.Register(r.Context(), &req)
 	if err != nil {
 		h.logger.Errorf("Failed to register user", logger.Err(err))
@@ -57,6 +64,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	loginResp, err := h.authService.Login(r.Context(), &req)
 	if err != nil {
 		h.logger.Errorf("Failed to login", logger.Err(err))
@@ -72,6 +85,12 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var req models.RefreshTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -143,6 +162,12 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	if err := h.authService.ChangePassword(r.Context(), claims.UserID, &req); err != nil {
 		h.logger.Errorf("Failed to change password", logger.Err(err))
 		// Don't leak internal error details
@@ -165,6 +190,12 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
