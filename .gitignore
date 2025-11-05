@@ -5,6 +5,8 @@ bin/
 *.dll
 *.so
 *.dylib
+/api
+/cli
 
 # Test binary, built with `go test -c`
 *.test

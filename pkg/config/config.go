@@ -9,11 +9,12 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Logger   LoggerConfig
-	App      AppConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	Redis        RedisConfig
+	Logger       LoggerConfig
+	App          AppConfig
+	Notification NotificationConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -59,6 +60,29 @@ type AppConfig struct {
 	Name        string
 }
 
+// NotificationConfig holds notification service configuration
+type NotificationConfig struct {
+	BaseURL string
+	Email   EmailConfig
+	Slack   SlackConfig
+}
+
+// EmailConfig holds email notification configuration
+type EmailConfig struct {
+	Enabled      bool
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	FromAddress  string
+}
+
+// SlackConfig holds Slack notification configuration
+type SlackConfig struct {
+	Enabled    bool
+	WebhookURL string
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -94,6 +118,21 @@ func Load() (*Config, error) {
 			Environment: getEnv("APP_ENV", "development"),
 			Version:     getEnv("APP_VERSION", "0.1.0"),
 			Name:        getEnv("APP_NAME", "intelligent-workflows"),
+		},
+		Notification: NotificationConfig{
+			BaseURL: getEnv("NOTIFICATION_BASE_URL", "http://localhost:8080"),
+			Email: EmailConfig{
+				Enabled:      getEnvAsBool("NOTIFICATION_EMAIL_ENABLED", false),
+				SMTPHost:     getEnv("NOTIFICATION_SMTP_HOST", "smtp.gmail.com"),
+				SMTPPort:     getEnvAsInt("NOTIFICATION_SMTP_PORT", 587),
+				SMTPUser:     getEnv("NOTIFICATION_SMTP_USER", ""),
+				SMTPPassword: getEnv("NOTIFICATION_SMTP_PASSWORD", ""),
+				FromAddress:  getEnv("NOTIFICATION_FROM_ADDRESS", "noreply@example.com"),
+			},
+			Slack: SlackConfig{
+				Enabled:    getEnvAsBool("NOTIFICATION_SLACK_ENABLED", false),
+				WebhookURL: getEnv("NOTIFICATION_SLACK_WEBHOOK_URL", ""),
+			},
 		},
 	}
 
@@ -165,6 +204,15 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
+		}
+	}
+	return defaultValue
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
 		}
 	}
 	return defaultValue
