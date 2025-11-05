@@ -60,6 +60,32 @@ func (cb *ContextBuilder) BuildContext(
 	return execContext, nil
 }
 
+// BuildContextFromExisting reloads context resources while preserving existing context
+func (cb *ContextBuilder) BuildContextFromExisting(
+	ctx context.Context,
+	existingContext map[string]interface{},
+	contextDef models.ContextDefinition,
+) error {
+	// Load additional context data as specified, refreshing stale data
+	if len(contextDef.Load) > 0 {
+		for _, resource := range contextDef.Load {
+			cb.logger.Infof("Reloading context resource: %s", resource)
+
+			data, err := cb.loadResource(ctx, resource, existingContext)
+			if err != nil {
+				cb.logger.Errorf("Failed to reload resource %s: %v", resource, err)
+				// Continue loading other resources even if one fails
+				continue
+			}
+
+			// Merge reloaded data into context
+			cb.mergeIntoContext(existingContext, resource, data)
+		}
+	}
+
+	return nil
+}
+
 // loadResource loads a specific resource (e.g., order.details, customer.history)
 func (cb *ContextBuilder) loadResource(
 	ctx context.Context,

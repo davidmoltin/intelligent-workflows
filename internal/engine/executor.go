@@ -96,6 +96,12 @@ func (we *WorkflowExecutor) Execute(
 	// Execute workflow steps
 	result, err := we.executeSteps(ctx, execution, workflow, execContext)
 	if err != nil {
+		// Check if execution was paused (not a real error)
+		if err == ErrExecutionPaused {
+			we.logger.Infof("Workflow execution paused: %s", execution.ExecutionID)
+			return execution, nil
+		}
+
 		we.logger.Errorf("Workflow execution failed: %v", err)
 		we.completeExecution(ctx, execution, models.ExecutionResultFailed, err.Error())
 		return execution, err
@@ -239,7 +245,7 @@ func (we *WorkflowExecutor) executeStep(
 		nextStepID = "" // Parallel steps end the flow for now
 
 	case "wait":
-		err = we.executeWaitStep(ctx, step, execContext)
+		err = we.executeWaitStep(ctx, execution, step, execContext)
 		nextStepID = "" // Wait steps pause the flow
 
 	default:
@@ -373,17 +379,215 @@ func (we *WorkflowExecutor) executeParallelStep(
 	}
 }
 
-// executeWaitStep executes a wait step (placeholder)
+// ErrExecutionPaused is returned when a workflow execution is paused (waiting)
+var ErrExecutionPaused = fmt.Errorf("execution paused for wait step")
+
+// executeWaitStep executes a wait step by pausing the execution
 func (we *WorkflowExecutor) executeWaitStep(
 	ctx context.Context,
+	execution *models.WorkflowExecution,
 	step *models.Step,
 	execContext map[string]interface{},
 ) error {
-	// Wait steps would pause execution and wait for an event or timeout
-	// This is a simplified implementation
-	we.logger.Infof("Wait step: waiting for event %s", step.Wait.Event)
-	// TODO: Implement actual wait/pause mechanism
-	return nil
+	if step.Wait == nil {
+		return fmt.Errorf("wait step has no wait configuration")
+	}
+
+	we.logger.Infof("Wait step: pausing execution to wait for event %s", step.Wait.Event)
+
+	// Calculate timeout if specified
+	var timeoutAt *time.Time
+	if step.Wait.Timeout != "" {
+		duration, err := time.ParseDuration(step.Wait.Timeout)
+		if err != nil {
+			return fmt.Errorf("invalid timeout duration: %w", err)
+		}
+		timeout := time.Now().Add(duration)
+		timeoutAt = &timeout
+	}
+
+	// Create wait state
+	waitState := &models.WaitState{
+		Event:        step.Wait.Event,
+		TimeoutAt:    timeoutAt,
+		OnTimeout:    step.Wait.OnTimeout,
+		WaitingSince: time.Now(),
+	}
+
+	// Update execution to waiting status
+	execution.Status = models.ExecutionStatusWaiting
+	execution.CurrentStepID = &step.ID
+	execution.WaitState = waitState
+
+	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+		return fmt.Errorf("failed to update execution to waiting state: %w", err)
+	}
+
+	we.logger.Infof("Execution %s paused, waiting for event: %s", execution.ExecutionID, step.Wait.Event)
+
+	// Return special error to signal pause
+	return ErrExecutionPaused
+}
+
+// ResumeExecution resumes a paused workflow execution
+func (we *WorkflowExecutor) ResumeExecution(
+	ctx context.Context,
+	executionID uuid.UUID,
+	workflow *models.Workflow,
+	resumeEvent string,
+	resumeData map[string]interface{},
+) (*models.WorkflowExecution, error) {
+	we.logger.Infof("Resuming workflow execution: %s with event: %s", executionID, resumeEvent)
+
+	// Load execution from database
+	execution, err := we.executionRepo.GetExecutionByID(ctx, executionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load execution: %w", err)
+	}
+
+	// Verify execution is in waiting state
+	if execution.Status != models.ExecutionStatusWaiting {
+		return nil, fmt.Errorf("execution is not in waiting state, current status: %s", execution.Status)
+	}
+
+	if execution.WaitState == nil {
+		return nil, fmt.Errorf("execution has no wait state")
+	}
+
+	// Verify event matches what we're waiting for
+	if execution.WaitState.Event != resumeEvent {
+		return nil, fmt.Errorf("unexpected event: waiting for %s, got %s", execution.WaitState.Event, resumeEvent)
+	}
+
+	// Load and enrich context with resume data
+	execContext := map[string]interface{}(execution.Context)
+	if resumeData != nil {
+		// Merge resume data into context
+		execContext["resume_event"] = resumeData
+	}
+
+	// Reload context data from sources to ensure freshness
+	if err := we.contextBuilder.BuildContextFromExisting(ctx, execContext, workflow.Definition.Context); err != nil {
+		we.logger.Warnf("Failed to reload context: %v", err)
+		// Continue with existing context
+	}
+
+	if err := we.contextBuilder.EnrichContext(ctx, execContext); err != nil {
+		we.logger.Warnf("Failed to enrich context: %v", err)
+	}
+
+	execution.Context = execContext
+
+	// Update execution status back to running
+	execution.Status = models.ExecutionStatusRunning
+	execution.WaitState = nil
+
+	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+		return nil, fmt.Errorf("failed to update execution status: %w", err)
+	}
+
+	// Find the next step after the wait step
+	nextStepID := ""
+	if execution.CurrentStepID != nil {
+		// Build step map
+		stepMap := make(map[string]*models.Step)
+		for i := range workflow.Definition.Steps {
+			step := &workflow.Definition.Steps[i]
+			stepMap[step.ID] = step
+		}
+
+		// Get the wait step to find what comes next
+		waitStep, exists := stepMap[*execution.CurrentStepID]
+		if !exists {
+			return nil, fmt.Errorf("wait step not found: %s", *execution.CurrentStepID)
+		}
+
+		// Determine next step based on wait step metadata or sequential flow
+		if waitStep.Metadata != nil {
+			if next, ok := waitStep.Metadata["on_resume"].(string); ok {
+				nextStepID = next
+			}
+		}
+
+		// If no explicit next step, find the step after wait step in sequence
+		if nextStepID == "" {
+			for i, s := range workflow.Definition.Steps {
+				if s.ID == *execution.CurrentStepID && i+1 < len(workflow.Definition.Steps) {
+					nextStepID = workflow.Definition.Steps[i+1].ID
+					break
+				}
+			}
+		}
+	}
+
+	execution.CurrentStepID = nil
+
+	// Continue execution from next step
+	result, err := we.continueStepsFrom(ctx, execution, workflow, execContext, nextStepID)
+	if err != nil {
+		// Check if execution was paused again
+		if err == ErrExecutionPaused {
+			we.logger.Infof("Workflow execution paused again: %s", execution.ExecutionID)
+			return execution, nil
+		}
+
+		we.logger.Errorf("Workflow execution failed after resume: %v", err)
+		we.completeExecution(ctx, execution, models.ExecutionResultFailed, err.Error())
+		return execution, err
+	}
+
+	// Complete execution successfully
+	we.completeExecution(ctx, execution, result, "")
+
+	we.logger.Infof("Resumed workflow execution completed: %s - Result: %s", execution.ExecutionID, result)
+
+	return execution, nil
+}
+
+// continueStepsFrom continues execution from a specific step ID
+func (we *WorkflowExecutor) continueStepsFrom(
+	ctx context.Context,
+	execution *models.WorkflowExecution,
+	workflow *models.Workflow,
+	execContext map[string]interface{},
+	startStepID string,
+) (models.ExecutionResult, error) {
+	// Build step map for navigation
+	stepMap := make(map[string]*models.Step)
+	for i := range workflow.Definition.Steps {
+		step := &workflow.Definition.Steps[i]
+		stepMap[step.ID] = step
+	}
+
+	currentStepID := startStepID
+	var finalResult models.ExecutionResult = models.ExecutionResultExecuted
+
+	// Execute steps from the given starting point
+	for currentStepID != "" {
+		step, exists := stepMap[currentStepID]
+		if !exists {
+			return models.ExecutionResultFailed, fmt.Errorf("step not found: %s", currentStepID)
+		}
+
+		we.logger.Infof("Executing step: %s (type: %s)", step.ID, step.Type)
+
+		// Execute step with retry logic
+		nextStepID, result, err := we.executeStepWithRetry(ctx, execution, step, execContext)
+		if err != nil {
+			return models.ExecutionResultFailed, fmt.Errorf("step %s failed: %w", step.ID, err)
+		}
+
+		// Update final result based on action result
+		if result != nil && result.Action == "block" {
+			finalResult = models.ExecutionResultBlocked
+		} else if result != nil && result.Action == "allow" {
+			finalResult = models.ExecutionResultAllowed
+		}
+
+		currentStepID = nextStepID
+	}
+
+	return finalResult, nil
 }
 
 // completeExecution marks an execution as complete
@@ -449,9 +653,9 @@ func (we *WorkflowExecutor) isRetryableError(err error, retryOn []string) bool {
 	return false
 }
 
-// ResumeExecution resumes a paused workflow execution
-func (we *WorkflowExecutor) ResumeExecution(ctx context.Context, execution *models.WorkflowExecution) error {
-	we.logger.Infof("Resuming execution %s (resume count: %d)", execution.ID, execution.ResumeCount)
+// ResumePausedExecution resumes a paused workflow execution
+func (we *WorkflowExecutor) ResumePausedExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+	we.logger.Infof("Resuming paused execution %s (resume count: %d)", execution.ID, execution.ResumeCount)
 
 	// Validate execution state
 	if execution.Status != models.ExecutionStatusRunning {

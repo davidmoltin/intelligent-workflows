@@ -82,6 +82,13 @@ func (r *Router) SetupRoutes() {
 
 	// API v1
 	r.router.Route("/api/v1", func(router chi.Router) {
+		// API Documentation (public)
+		router.Route("/docs", func(router chi.Router) {
+			router.Get("/", r.handlers.Docs.RedirectToDocs)
+			router.Get("/ui", r.handlers.Docs.ServeSwaggerUI)
+			router.Get("/openapi.yaml", r.handlers.Docs.ServeOpenAPISpec)
+		})
+
 		// Auth endpoints (public)
 		router.Route("/auth", func(router chi.Router) {
 			router.Post("/register", r.handlers.Auth.Register)
@@ -147,6 +154,15 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("approval:reject", r.logger)).Post("/{id}/reject", r.handlers.Approval.RejectRequest)
 			})
 		})
+
+		// AI endpoints (only if AI service is configured)
+		if r.handlers.AI != nil {
+			router.Route("/ai", func(router chi.Router) {
+				router.Post("/chat", r.handlers.AI.Chat)
+				router.Get("/capabilities", r.handlers.AI.GetCapabilities)
+				router.Post("/interpret", r.handlers.AI.InterpretWorkflow)
+			})
+		}
 	})
 }
 

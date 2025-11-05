@@ -20,7 +20,7 @@ type ExecutionRepository interface {
 
 // WorkflowEngine defines the interface for workflow execution
 type WorkflowEngine interface {
-	ResumeExecution(ctx context.Context, execution *models.WorkflowExecution) error
+	ResumePausedExecution(ctx context.Context, execution *models.WorkflowExecution) error
 }
 
 // WorkflowResumerImpl implements WorkflowResumer interface
@@ -163,7 +163,7 @@ func (w *WorkflowResumerImpl) resumeExecution(ctx context.Context, execution *mo
 
 	// Trigger workflow engine to continue execution
 	if w.engine != nil {
-		if err := w.engine.ResumeExecution(ctx, execution); err != nil {
+		if err := w.engine.ResumePausedExecution(ctx, execution); err != nil {
 			w.logger.Errorf("Failed to resume execution in engine %s: %v", execution.ID, err)
 			return fmt.Errorf("failed to resume execution in engine: %w", err)
 		}

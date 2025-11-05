@@ -14,6 +14,7 @@ type ExecutionStatus string
 const (
 	ExecutionStatusPending   ExecutionStatus = "pending"
 	ExecutionStatusRunning   ExecutionStatus = "running"
+	ExecutionStatusWaiting   ExecutionStatus = "waiting"
 	ExecutionStatusCompleted ExecutionStatus = "completed"
 	ExecutionStatusFailed    ExecutionStatus = "failed"
 	ExecutionStatusBlocked   ExecutionStatus = "blocked"
@@ -41,6 +42,8 @@ type WorkflowExecution struct {
 	Context        JSONB            `json:"context" db:"context"`
 	Status         ExecutionStatus  `json:"status" db:"status"`
 	Result         *ExecutionResult `json:"result,omitempty" db:"result"`
+	CurrentStepID  *string          `json:"current_step_id,omitempty" db:"current_step_id"`
+	WaitState      *WaitState       `json:"wait_state,omitempty" db:"wait_state"`
 	StartedAt      time.Time        `json:"started_at" db:"started_at"`
 	CompletedAt    *time.Time       `json:"completed_at,omitempty" db:"completed_at"`
 	DurationMs     *int             `json:"duration_ms,omitempty" db:"duration_ms"`
@@ -55,6 +58,33 @@ type WorkflowExecution struct {
 	ResumeData     JSONB       `json:"resume_data,omitempty" db:"resume_data"`
 	ResumeCount    int         `json:"resume_count" db:"resume_count"`
 	LastResumedAt  *time.Time  `json:"last_resumed_at,omitempty" db:"last_resumed_at"`
+}
+
+// WaitState represents the state of a waiting execution
+type WaitState struct {
+	Event      string     `json:"event"`
+	TimeoutAt  *time.Time `json:"timeout_at,omitempty"`
+	OnTimeout  string     `json:"on_timeout,omitempty"`
+	WaitingSince time.Time `json:"waiting_since"`
+}
+
+// Scan implements the sql.Scanner interface for WaitState
+func (w *WaitState) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+
+	return json.Unmarshal(bytes, w)
+}
+
+// Value implements the driver.Valuer interface for WaitState
+func (w WaitState) Value() (driver.Value, error) {
+	return json.Marshal(w)
 }
 
 // StepExecutionStatus represents the status of a step execution

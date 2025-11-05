@@ -154,12 +154,6 @@ func (fb *FixtureBuilder) Rule(overrides ...func(*models.Rule)) *models.Rule {
 					Value:    1000.0,
 				},
 			},
-			Actions: []models.Action{
-				{
-					Type:   "block",
-					Reason: "High value order requires approval",
-				},
-			},
 		},
 		Enabled:   true,
 		CreatedAt: now,
