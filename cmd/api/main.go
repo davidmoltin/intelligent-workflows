@@ -7,11 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
+	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
+	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/database"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -60,11 +61,24 @@ func run() error {
 
 	// Initialize repositories
 	workflowRepo := postgres.NewWorkflowRepository(db.DB)
+	executionRepo := postgres.NewExecutionRepository(db.DB)
+	eventRepo := postgres.NewEventRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(db.DB)
+
+	// Initialize workflow engine components
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
+	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
+
+	// Initialize services
+	approvalService := services.NewApprovalService(approvalRepo, log)
 
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
 		workflowRepo,
+		executionRepo,
+		eventRouter,
+		approvalService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,
