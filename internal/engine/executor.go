@@ -445,3 +445,19 @@ func (we *WorkflowExecutor) isRetryableError(err error, retryOn []string) bool {
 
 	return false
 }
+
+// ResumeExecution resumes a paused workflow execution
+// TODO: Phase 3 - Implement full resume logic with step continuation
+func (we *WorkflowExecutor) ResumeExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+	we.logger.Infof("Resume execution requested for %s (resume count: %d)", execution.ID, execution.ResumeCount)
+
+	// TODO: Phase 3 implementation will:
+	// 1. Load the workflow definition
+	// 2. Find the next step to execute (from next_step_id or paused_step_id)
+	// 3. Restore execution context from resume_data
+	// 4. Continue workflow execution from the paused step
+	// 5. Handle approval decisions from resume_data
+
+	we.logger.Warn("ResumeExecution not yet fully implemented - placeholder for Phase 3")
+	return fmt.Errorf("resume execution not yet implemented")
+}

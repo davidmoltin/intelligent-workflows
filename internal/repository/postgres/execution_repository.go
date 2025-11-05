@@ -55,7 +55,14 @@ func (r *ExecutionRepository) UpdateExecution(ctx context.Context, execution *mo
 		    completed_at = $5,
 		    duration_ms = $6,
 		    error_message = $7,
-		    metadata = $8
+		    metadata = $8,
+		    paused_at = $9,
+		    paused_reason = $10,
+		    paused_step_id = $11,
+		    next_step_id = $12,
+		    resume_data = $13,
+		    resume_count = $14,
+		    last_resumed_at = $15
 		WHERE id = $1`
 
 	result, err := r.db.ExecContext(
@@ -63,6 +70,9 @@ func (r *ExecutionRepository) UpdateExecution(ctx context.Context, execution *mo
 		execution.ID, execution.Context, execution.Status,
 		execution.Result, execution.CompletedAt, execution.DurationMs,
 		execution.ErrorMessage, execution.Metadata,
+		execution.PausedAt, execution.PausedReason, execution.PausedStepID,
+		execution.NextStepID, execution.ResumeData, execution.ResumeCount,
+		execution.LastResumedAt,
 	)
 
 	if err != nil {
@@ -87,7 +97,8 @@ func (r *ExecutionRepository) GetExecutionByID(ctx context.Context, id uuid.UUID
 	query := `
 		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
-		       error_message, metadata
+		       error_message, metadata, paused_at, paused_reason, paused_step_id,
+		       next_step_id, resume_data, resume_count, last_resumed_at
 		FROM workflow_executions
 		WHERE id = $1`
 
@@ -96,7 +107,9 @@ func (r *ExecutionRepository) GetExecutionByID(ctx context.Context, id uuid.UUID
 		&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 		&execution.Status, &execution.Result, &execution.StartedAt,
 		&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
-		&execution.Metadata,
+		&execution.Metadata, &execution.PausedAt, &execution.PausedReason,
+		&execution.PausedStepID, &execution.NextStepID, &execution.ResumeData,
+		&execution.ResumeCount, &execution.LastResumedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -301,4 +314,47 @@ func (r *ExecutionRepository) GetExecutionTrace(ctx context.Context, id uuid.UUI
 	}
 
 	return trace, nil
+}
+
+// GetPausedExecutions retrieves paused executions ordered by paused_at
+func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
+	query := `
+		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		       context, status, result, started_at, completed_at, duration_ms,
+		       error_message, metadata, paused_at, paused_reason, paused_step_id,
+		       next_step_id, resume_data, resume_count, last_resumed_at
+		FROM workflow_executions
+		WHERE status = $1
+		ORDER BY paused_at ASC
+		LIMIT $2`
+
+	rows, err := r.db.QueryContext(ctx, query, models.ExecutionStatusPaused, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paused executions: %w", err)
+	}
+	defer rows.Close()
+
+	var executions []*models.WorkflowExecution
+	for rows.Next() {
+		execution := &models.WorkflowExecution{}
+		err := rows.Scan(
+			&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+			&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
+			&execution.Status, &execution.Result, &execution.StartedAt,
+			&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
+			&execution.Metadata, &execution.PausedAt, &execution.PausedReason,
+			&execution.PausedStepID, &execution.NextStepID, &execution.ResumeData,
+			&execution.ResumeCount, &execution.LastResumedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan paused execution: %w", err)
+		}
+		executions = append(executions, execution)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating paused executions: %w", err)
+	}
+
+	return executions, nil
 }

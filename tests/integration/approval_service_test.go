@@ -43,7 +43,7 @@ func TestApprovalService_CreateApprovalRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -100,7 +100,7 @@ func TestApprovalService_ApproveRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -163,7 +163,7 @@ func TestApprovalService_RejectRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -226,7 +226,7 @@ func TestApprovalService_ExpireOldApprovals(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -286,7 +286,7 @@ func TestApprovalService_ListPendingApprovals(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 

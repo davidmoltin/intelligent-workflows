@@ -82,7 +82,7 @@ func run() error {
 	}
 
 	// Initialize workflow resumer
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor)
 
 	// Initialize JWT manager
 	jwtSecret := os.Getenv("JWT_SECRET")
