@@ -21,13 +21,14 @@ func TestApprovalService_CreateApprovalRequest(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupTestDB(t)
-	defer db.Close()
+	suite := SetupSuite(t)
+	defer TeardownSuite(t)
+	suite.ResetDatabase(t)
 
 	log, err := logger.New("info", "json")
 	require.NoError(t, err)
 
-	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(suite.DB.DB)
 
 	// Create notification service with disabled channels for testing
 	notificationCfg := &config.NotificationConfig{
@@ -42,7 +43,7 @@ func TestApprovalService_CreateApprovalRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -78,13 +79,14 @@ func TestApprovalService_ApproveRequest(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupTestDB(t)
-	defer db.Close()
+	suite := SetupSuite(t)
+	defer TeardownSuite(t)
+	suite.ResetDatabase(t)
 
 	log, err := logger.New("info", "json")
 	require.NoError(t, err)
 
-	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(suite.DB.DB)
 
 	notificationCfg := &config.NotificationConfig{
 		BaseURL: "http://localhost:8080",
@@ -98,7 +100,7 @@ func TestApprovalService_ApproveRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -140,13 +142,14 @@ func TestApprovalService_RejectRequest(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupTestDB(t)
-	defer db.Close()
+	suite := SetupSuite(t)
+	defer TeardownSuite(t)
+	suite.ResetDatabase(t)
 
 	log, err := logger.New("info", "json")
 	require.NoError(t, err)
 
-	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(suite.DB.DB)
 
 	notificationCfg := &config.NotificationConfig{
 		BaseURL: "http://localhost:8080",
@@ -160,7 +163,7 @@ func TestApprovalService_RejectRequest(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -202,13 +205,14 @@ func TestApprovalService_ExpireOldApprovals(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupTestDB(t)
-	defer db.Close()
+	suite := SetupSuite(t)
+	defer TeardownSuite(t)
+	suite.ResetDatabase(t)
 
 	log, err := logger.New("info", "json")
 	require.NoError(t, err)
 
-	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(suite.DB.DB)
 
 	notificationCfg := &config.NotificationConfig{
 		BaseURL: "http://localhost:8080",
@@ -222,7 +226,7 @@ func TestApprovalService_ExpireOldApprovals(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 
@@ -261,13 +265,14 @@ func TestApprovalService_ListPendingApprovals(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupTestDB(t)
-	defer db.Close()
+	suite := SetupSuite(t)
+	defer TeardownSuite(t)
+	suite.ResetDatabase(t)
 
 	log, err := logger.New("info", "json")
 	require.NoError(t, err)
 
-	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	approvalRepo := postgres.NewApprovalRepository(suite.DB.DB)
 
 	notificationCfg := &config.NotificationConfig{
 		BaseURL: "http://localhost:8080",
@@ -281,7 +286,7 @@ func TestApprovalService_ListPendingApprovals(t *testing.T) {
 	notificationSvc, err := services.NewNotificationService(notificationCfg, log)
 	require.NoError(t, err)
 
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
 

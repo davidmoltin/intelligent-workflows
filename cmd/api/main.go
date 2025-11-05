@@ -76,7 +76,7 @@ func run() error {
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, log)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -86,13 +86,18 @@ func run() error {
 	}
 
 	// Initialize workflow resumer
-	workflowResumer := services.NewWorkflowResumer(log)
+	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor)
 
 	// Initialize JWT manager
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "default-secret-change-this-in-production" // Default for development
-		log.Warn("JWT_SECRET not set, using default (not secure for production)")
+		// Fail in production if JWT_SECRET is not set
+		if cfg.App.Environment == "production" {
+			return fmt.Errorf("JWT_SECRET environment variable must be set in production")
+		}
+		// Allow default in development, but warn
+		jwtSecret = "default-secret-change-this-in-production"
+		log.Warn("JWT_SECRET not set, using default (INSECURE - only for development)")
 	}
 	jwtManager := auth.NewJWTManager(jwtSecret)
 
@@ -149,6 +154,10 @@ func run() error {
 	defer cancelWorker()
 	expirationWorker.Start(workerCtx)
 
+	// Initialize and start workflow resumer worker
+	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, 1*time.Minute)
+	resumerWorker.Start(workerCtx)
+
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
@@ -157,6 +166,7 @@ func run() error {
 		eventRouter,
 		approvalService,
 		authService,
+		workflowResumer,
 		aiService,
 		&handlers.HealthCheckers{
 			DB:    db,

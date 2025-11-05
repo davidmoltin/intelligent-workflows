@@ -75,7 +75,7 @@ func TestExecuteWaitStep(t *testing.T) {
 			Addr: "localhost:6379",
 		})
 
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		execution := &models.WorkflowExecution{
 			ID:          uuid.New(),
@@ -127,7 +127,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles missing wait config", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -150,7 +150,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles invalid timeout duration", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -229,7 +229,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		workflow := &models.Workflow{
 			ID:         workflowID,
@@ -296,7 +296,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -327,7 +327,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -347,7 +347,7 @@ func TestExecuteConditionStep(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	repo := &mockExecutionRepo{}
-	executor := NewWorkflowExecutor(redisClient, repo, log)
+	executor := NewWorkflowExecutor(redisClient, repo, nil, log)
 	ctx := context.Background()
 
 	t.Run("evaluates true condition", func(t *testing.T) {

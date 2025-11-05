@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -134,9 +135,12 @@ func OptionalAuth(authService *services.AuthService, log *logger.Logger) func(ne
 	}
 }
 
-// respondError sends an error response
+// respondError sends an error response with proper JSON encoding
 func respondError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write([]byte(`{"error":"` + message + `"}`))
+
+	// Use proper JSON encoding to prevent injection attacks
+	response := map[string]string{"error": message}
+	json.NewEncoder(w).Encode(response)
 }

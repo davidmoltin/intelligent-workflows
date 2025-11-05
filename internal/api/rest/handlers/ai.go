@@ -257,11 +257,6 @@ func (h *AIHandler) InterpretWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions
 
-// ErrorResponse represents an error response
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
 // respondJSON writes a JSON response
 func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

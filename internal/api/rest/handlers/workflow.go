@@ -8,6 +8,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -31,6 +32,12 @@ func (h *WorkflowHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateWorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -121,6 +128,12 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateWorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

@@ -19,6 +19,7 @@ const (
 	ExecutionStatusFailed    ExecutionStatus = "failed"
 	ExecutionStatusBlocked   ExecutionStatus = "blocked"
 	ExecutionStatusCancelled ExecutionStatus = "cancelled"
+	ExecutionStatusPaused    ExecutionStatus = "paused"
 )
 
 // ExecutionResult represents the result of a workflow execution
@@ -48,6 +49,15 @@ type WorkflowExecution struct {
 	DurationMs     *int             `json:"duration_ms,omitempty" db:"duration_ms"`
 	ErrorMessage   *string          `json:"error_message,omitempty" db:"error_message"`
 	Metadata       JSONB            `json:"metadata,omitempty" db:"metadata"`
+
+	// Workflow resumer fields
+	PausedAt       *time.Time  `json:"paused_at,omitempty" db:"paused_at"`
+	PausedReason   *string     `json:"paused_reason,omitempty" db:"paused_reason"`
+	PausedStepID   *uuid.UUID  `json:"paused_step_id,omitempty" db:"paused_step_id"`
+	NextStepID     *uuid.UUID  `json:"next_step_id,omitempty" db:"next_step_id"`
+	ResumeData     JSONB       `json:"resume_data,omitempty" db:"resume_data"`
+	ResumeCount    int         `json:"resume_count" db:"resume_count"`
+	LastResumedAt  *time.Time  `json:"last_resumed_at,omitempty" db:"last_resumed_at"`
 }
 
 // WaitState represents the state of a waiting execution

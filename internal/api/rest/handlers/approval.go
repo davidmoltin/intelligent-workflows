@@ -124,14 +124,19 @@ func (h *ApprovalHandler) ApproveRequest(w http.ResponseWriter, r *http.Request)
 		req.Reason = nil
 	}
 
-	// TODO: Get approver ID from authentication context
-	// For now, use a dummy approver ID
-	approverID := uuid.New()
+	// Get approver ID from authentication context
+	userID, ok := r.Context().Value("user_id").(uuid.UUID)
+	if !ok {
+		h.logger.Error("User ID not found in context")
+		RespondError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
-	approval, err := h.approvalService.ApproveRequest(r.Context(), id, approverID, req.Reason)
+	approval, err := h.approvalService.ApproveRequest(r.Context(), id, userID, req.Reason)
 	if err != nil {
 		h.logger.Errorf("Failed to approve request: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		// Don't leak internal error details
+		RespondError(w, http.StatusBadRequest, "Failed to approve request")
 		return
 	}
 
@@ -156,14 +161,19 @@ func (h *ApprovalHandler) RejectRequest(w http.ResponseWriter, r *http.Request) 
 		req.Reason = nil
 	}
 
-	// TODO: Get approver ID from authentication context
-	// For now, use a dummy approver ID
-	approverID := uuid.New()
+	// Get approver ID from authentication context
+	userID, ok := r.Context().Value("user_id").(uuid.UUID)
+	if !ok {
+		h.logger.Error("User ID not found in context")
+		RespondError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
-	approval, err := h.approvalService.RejectRequest(r.Context(), id, approverID, req.Reason)
+	approval, err := h.approvalService.RejectRequest(r.Context(), id, userID, req.Reason)
 	if err != nil {
 		h.logger.Errorf("Failed to reject request: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		// Don't leak internal error details
+		RespondError(w, http.StatusBadRequest, "Failed to reject request")
 		return
 	}
 

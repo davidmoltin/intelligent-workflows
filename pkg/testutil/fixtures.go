@@ -48,7 +48,7 @@ func (fb *FixtureBuilder) Workflow(overrides ...func(*models.Workflow)) *models.
 					Type: "action",
 					Action: &models.Action{
 						Type:   "block",
-						Reason: "High value order",
+						Reason: "High value order requires approval",
 					},
 					Execute: []models.ExecuteAction{
 						{

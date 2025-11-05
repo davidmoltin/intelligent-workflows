@@ -7,12 +7,14 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 )
 
 // TestDB represents a test database instance
 type TestDB struct {
 	Pool   *pgxpool.Pool
+	DB     *sql.DB
 	DBName string
 	t      *testing.T
 }
@@ -35,13 +37,20 @@ func SetupTestDB(t *testing.T) *TestDB {
 	_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
 	require.NoError(t, err, "Failed to create test database")
 
-	// Connect to test database
+	// Connect to test database with pgxpool
 	testConnStr := fmt.Sprintf("postgres://postgres:postgres@localhost:5432/%s?sslmode=disable", dbName)
 	pool, err := pgxpool.New(ctx, testConnStr)
 	require.NoError(t, err, "Failed to connect to test database")
 
+	// Also create a stdlib *sql.DB for repositories that need it
+	config, err := pgxpool.ParseConfig(testConnStr)
+	require.NoError(t, err, "Failed to parse connection string")
+
+	stdDB := stdlib.OpenDB(*config.ConnConfig)
+
 	return &TestDB{
 		Pool:   pool,
+		DB:     stdDB,
 		DBName: dbName,
 		t:      t,
 	}
@@ -51,8 +60,13 @@ func SetupTestDB(t *testing.T) *TestDB {
 func (db *TestDB) Teardown() {
 	db.t.Helper()
 
-	// Close pool
-	db.Pool.Close()
+	// Close connections
+	if db.DB != nil {
+		db.DB.Close()
+	}
+	if db.Pool != nil {
+		db.Pool.Close()
+	}
 
 	// Connect to default postgres database to drop test database
 	adminConnStr := "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"

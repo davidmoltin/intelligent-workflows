@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -9,20 +10,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
+	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 )
 
 // ExecutionHandler handles execution-related HTTP requests
 type ExecutionHandler struct {
-	logger        *logger.Logger
-	executionRepo *postgres.ExecutionRepository
+	logger          *logger.Logger
+	executionRepo   *postgres.ExecutionRepository
+	workflowResumer *services.WorkflowResumerImpl
 }
 
 // NewExecutionHandler creates a new execution handler
-func NewExecutionHandler(log *logger.Logger, executionRepo *postgres.ExecutionRepository) *ExecutionHandler {
+func NewExecutionHandler(log *logger.Logger, executionRepo *postgres.ExecutionRepository, workflowResumer *services.WorkflowResumerImpl) *ExecutionHandler {
 	return &ExecutionHandler{
-		logger:        log,
-		executionRepo: executionRepo,
+		logger:          log,
+		executionRepo:   executionRepo,
+		workflowResumer: workflowResumer,
 	}
 }
 
@@ -129,4 +133,126 @@ func (h *ExecutionHandler) GetExecutionTrace(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(trace)
+}
+
+// PauseExecution handles POST /api/v1/executions/:id/pause
+func (h *ExecutionHandler) PauseExecution(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid execution ID")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Reason == "" {
+		req.Reason = "Manually paused via API"
+	}
+
+	// Pause the execution
+	if err := h.workflowResumer.PauseExecution(r.Context(), id, req.Reason, nil); err != nil {
+		h.logger.Errorf("Failed to pause execution %s: %v", id, err)
+		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to pause execution: %v", err))
+		return
+	}
+
+	// Get updated execution
+	execution, err := h.executionRepo.GetExecutionByID(r.Context(), id)
+	if err != nil {
+		h.logger.Errorf("Failed to get execution after pause: %v", err)
+		RespondError(w, http.StatusInternalServerError, "Execution paused but failed to retrieve updated state")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(execution)
+}
+
+// ResumeExecution handles POST /api/v1/executions/:id/resume
+func (h *ExecutionHandler) ResumeExecution(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid execution ID")
+		return
+	}
+
+	// Parse request body (optional resume data)
+	var req struct {
+		ResumeData map[string]interface{} `json:"resume_data,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Allow empty body
+		req.ResumeData = make(map[string]interface{})
+	}
+
+	// Resume the execution
+	if len(req.ResumeData) > 0 {
+		if err := h.workflowResumer.ResumeExecution(r.Context(), id, req.ResumeData); err != nil {
+			h.logger.Errorf("Failed to resume execution %s: %v", id, err)
+			RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to resume execution: %v", err))
+			return
+		}
+	} else {
+		// Use backward-compatible ResumeWorkflow with approved=true as default
+		if err := h.workflowResumer.ResumeWorkflow(r.Context(), id, true); err != nil {
+			h.logger.Errorf("Failed to resume execution %s: %v", id, err)
+			RespondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to resume execution: %v", err))
+			return
+		}
+	}
+
+	// Get updated execution
+	execution, err := h.executionRepo.GetExecutionByID(r.Context(), id)
+	if err != nil {
+		h.logger.Errorf("Failed to get execution after resume: %v", err)
+		RespondError(w, http.StatusInternalServerError, "Execution resumed but failed to retrieve updated state")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(execution)
+}
+
+// ListPausedExecutions handles GET /api/v1/executions/paused
+func (h *ExecutionHandler) ListPausedExecutions(w http.ResponseWriter, r *http.Request) {
+	// Parse limit parameter
+	limitStr := r.URL.Query().Get("limit")
+	limit := 50
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	// Get paused executions
+	executions, err := h.workflowResumer.GetPausedExecutions(r.Context(), limit)
+	if err != nil {
+		h.logger.Errorf("Failed to list paused executions: %v", err)
+		RespondError(w, http.StatusInternalServerError, "Failed to retrieve paused executions")
+		return
+	}
+
+	response := struct {
+		Executions []*models.WorkflowExecution `json:"executions"`
+		Count      int                          `json:"count"`
+	}{
+		Executions: executions,
+		Count:      len(executions),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

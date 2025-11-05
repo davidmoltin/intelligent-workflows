@@ -7,6 +7,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/validator"
 )
 
 // EventHandler handles event-related HTTP requests
@@ -29,18 +30,13 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Errorf("Failed to decode request: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Validate required fields
-	if req.EventType == "" {
-		http.Error(w, "event_type is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.Payload == nil {
-		http.Error(w, "payload is required", http.StatusBadRequest)
+	// Validate request
+	if err := validator.Validate(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -53,12 +49,10 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	event, err := h.eventRouter.RouteEvent(r.Context(), req.EventType, req.Source, req.Payload)
 	if err != nil {
 		h.logger.Errorf("Failed to route event: %v", err)
-		http.Error(w, "Failed to process event", http.StatusInternalServerError)
+		RespondError(w, http.StatusInternalServerError, "Failed to process event")
 		return
 	}
 
 	// Return event
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(event)
+	RespondJSON(w, http.StatusCreated, event)
 }
