@@ -14,6 +14,7 @@ type Handlers struct {
 	Event     *EventHandler
 	Execution *ExecutionHandler
 	Approval  *ApprovalHandler
+	Auth      *AuthHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -29,6 +30,7 @@ func NewHandlers(
 	executionRepo *postgres.ExecutionRepository,
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
+	authService *services.AuthService,
 	healthCheckers *HealthCheckers,
 ) *Handlers {
 	return &Handlers{
@@ -37,5 +39,6 @@ func NewHandlers(
 		Event:     NewEventHandler(log, eventRouter),
 		Execution: NewExecutionHandler(log, executionRepo),
 		Approval:  NewApprovalHandler(log, approvalService),
+		Auth:      NewAuthHandler(log, authService),
 	}
 }
