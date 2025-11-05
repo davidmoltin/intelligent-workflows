@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 

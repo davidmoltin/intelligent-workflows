@@ -1,0 +1,87 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+.circleci
+
+# Documentation
+*.md
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+examples/
+
+# IDE
+.idea
+.vscode
+.vs
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+bin/
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+*.prof
+
+# Dependencies
+vendor/
+node_modules/
+
+# Test files
+*_test.go
+testdata/
+tests/
+test/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+*.pid
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Kubernetes
+k8s/
+*.yaml
+*.yml
+
+# Monitoring
+monitoring/
+prometheus/
+grafana/
+
+# Database backups
+*.sql
+*.db
+backup_*
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Misc
+Makefile
+.editorconfig
+.pre-commit-config.yaml

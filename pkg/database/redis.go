@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/redis/go-redis/v9"
 )
 
 // RedisClient wraps the Redis connection

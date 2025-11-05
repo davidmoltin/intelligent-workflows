@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workflows-api
+  namespace: intelligent-workflows
+  labels:
+    app: workflows-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: workflows-api
+  unhealthyPodEvictionPolicy: AlwaysAllow

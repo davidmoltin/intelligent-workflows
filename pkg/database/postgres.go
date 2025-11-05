@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	_ "github.com/lib/pq"
 )
 
 // PostgresDB wraps the database connection

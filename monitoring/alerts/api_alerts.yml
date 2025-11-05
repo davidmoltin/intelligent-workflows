@@ -1,0 +1,115 @@
+groups:
+  - name: api_alerts
+    interval: 30s
+    rules:
+      # API availability
+      - alert: APIDown
+        expr: up{job="workflows-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Workflows API is down"
+          description: "Workflows API instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="workflows-api",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="workflows-api"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="workflows-api"}[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job="workflows-api"}
+            /
+            container_spec_memory_limit_bytes{pod=~"workflows-api.*"}
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is at {{ $value | humanizePercentage }} of limit"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          rate(process_cpu_seconds_total{job="workflows-api"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is at {{ $value | humanizePercentage }}"
+
+      # Database connection issues
+      - alert: DatabaseConnectionFailure
+        expr: |
+          rate(db_connections_failed_total{job="workflows-api"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection failures detected"
+          description: "{{ $value }} database connection failures per second"
+
+      # Redis connection issues
+      - alert: RedisConnectionFailure
+        expr: |
+          rate(redis_connections_failed_total{job="workflows-api"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis connection failures detected"
+          description: "{{ $value }} Redis connection failures per second"
+
+      # Too many restarts
+      - alert: PodRestartingTooOften
+        expr: |
+          rate(kube_pod_container_status_restarts_total{namespace="intelligent-workflows",pod=~"workflows-api.*"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod restarting too often"
+          description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+
+      # Disk space
+      - alert: DiskSpaceRunningLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space running low"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"

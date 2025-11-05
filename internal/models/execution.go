@@ -32,19 +32,19 @@ const (
 
 // WorkflowExecution represents an execution instance of a workflow
 type WorkflowExecution struct {
-	ID             uuid.UUID                `json:"id" db:"id"`
-	WorkflowID     uuid.UUID                `json:"workflow_id" db:"workflow_id"`
-	ExecutionID    string                   `json:"execution_id" db:"execution_id"`
-	TriggerEvent   string                   `json:"trigger_event" db:"trigger_event"`
-	TriggerPayload JSONB                    `json:"trigger_payload" db:"trigger_payload"`
-	Context        JSONB                    `json:"context" db:"context"`
-	Status         ExecutionStatus          `json:"status" db:"status"`
-	Result         *ExecutionResult         `json:"result,omitempty" db:"result"`
-	StartedAt      time.Time                `json:"started_at" db:"started_at"`
-	CompletedAt    *time.Time               `json:"completed_at,omitempty" db:"completed_at"`
-	DurationMs     *int                     `json:"duration_ms,omitempty" db:"duration_ms"`
-	ErrorMessage   *string                  `json:"error_message,omitempty" db:"error_message"`
-	Metadata       JSONB                    `json:"metadata,omitempty" db:"metadata"`
+	ID             uuid.UUID        `json:"id" db:"id"`
+	WorkflowID     uuid.UUID        `json:"workflow_id" db:"workflow_id"`
+	ExecutionID    string           `json:"execution_id" db:"execution_id"`
+	TriggerEvent   string           `json:"trigger_event" db:"trigger_event"`
+	TriggerPayload JSONB            `json:"trigger_payload" db:"trigger_payload"`
+	Context        JSONB            `json:"context" db:"context"`
+	Status         ExecutionStatus  `json:"status" db:"status"`
+	Result         *ExecutionResult `json:"result,omitempty" db:"result"`
+	StartedAt      time.Time        `json:"started_at" db:"started_at"`
+	CompletedAt    *time.Time       `json:"completed_at,omitempty" db:"completed_at"`
+	DurationMs     *int             `json:"duration_ms,omitempty" db:"duration_ms"`
+	ErrorMessage   *string          `json:"error_message,omitempty" db:"error_message"`
+	Metadata       JSONB            `json:"metadata,omitempty" db:"metadata"`
 }
 
 // StepExecutionStatus represents the status of a step execution
