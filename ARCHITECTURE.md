@@ -6,7 +6,7 @@ An API-first, AI-agent-ready workflow orchestration platform for e-commerce micr
 
 ### Design Principles
 - **Simplicity First**: No complex BPMN diagrams or steep learning curves
-- **API-First**: Every feature accessible via REST/GraphQL APIs
+- **API-First**: Every feature accessible via REST APIs
 - **AI-Native**: Designed for both human and AI agent interaction
 - **Developer-Friendly**: Code-first workflow definitions (JSON/YAML)
 - **User-Friendly**: React UI for non-technical users
@@ -27,8 +27,8 @@ An API-first, AI-agent-ready workflow orchestration platform for e-commerce micr
 ┌─────────────────────────────────────────────────────────────┐
 │                   API Gateway Layer                          │
 ├──────────────────┬──────────────────┬──────────────────────┤
-│   REST API       │   GraphQL        │   Webhook Handler    │
-│   (CRUD ops)     │   (Complex queries)│   (Event ingestion)│
+│   REST API       │   WebSockets     │   Webhook Handler    │
+│   (CRUD ops)     │   (Real-time)    │   (Event ingestion)  │
 └──────────────────┴──────────────────┴──────────────────────┘
                             │
                             ▼
@@ -445,95 +445,6 @@ POST   /api/v1/ai/validate                  # Validate workflow definition
 GET    /api/v1/ai/capabilities              # Get available actions/entities
 ```
 
-### 6.2 GraphQL Schema
-
-```graphql
-type Workflow {
-  id: ID!
-  workflowId: String!
-  version: String!
-  name: String!
-  description: String
-  definition: JSON!
-  enabled: Boolean!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-  executions(limit: Int, offset: Int): [WorkflowExecution!]!
-  tags: [String!]!
-}
-
-type WorkflowExecution {
-  id: ID!
-  executionId: String!
-  workflow: Workflow!
-  triggerEvent: String
-  triggerPayload: JSON
-  context: JSON
-  status: ExecutionStatus!
-  result: ExecutionResult
-  startedAt: DateTime!
-  completedAt: DateTime
-  durationMs: Int
-  steps: [StepExecution!]!
-  errorMessage: String
-}
-
-enum ExecutionStatus {
-  PENDING
-  RUNNING
-  COMPLETED
-  FAILED
-  BLOCKED
-}
-
-enum ExecutionResult {
-  ALLOWED
-  BLOCKED
-  EXECUTED
-}
-
-type StepExecution {
-  id: ID!
-  stepId: String!
-  stepType: String!
-  status: ExecutionStatus!
-  input: JSON
-  output: JSON
-  startedAt: DateTime!
-  completedAt: DateTime
-  durationMs: Int
-}
-
-type Query {
-  workflows(enabled: Boolean, tags: [String!]): [Workflow!]!
-  workflow(id: ID!): Workflow
-  executions(
-    workflowId: ID
-    status: ExecutionStatus
-    limit: Int
-    offset: Int
-  ): [WorkflowExecution!]!
-  execution(id: ID!): WorkflowExecution
-  approvals(status: ApprovalStatus): [ApprovalRequest!]!
-}
-
-type Mutation {
-  createWorkflow(input: CreateWorkflowInput!): Workflow!
-  updateWorkflow(id: ID!, input: UpdateWorkflowInput!): Workflow!
-  deleteWorkflow(id: ID!): Boolean!
-  enableWorkflow(id: ID!): Workflow!
-  disableWorkflow(id: ID!): Workflow!
-  executeWorkflow(id: ID!, payload: JSON): WorkflowExecution!
-  approveRequest(id: ID!, reason: String): ApprovalRequest!
-  rejectRequest(id: ID!, reason: String!): ApprovalRequest!
-}
-
-type Subscription {
-  executionUpdated(workflowId: ID): WorkflowExecution!
-  approvalCreated: ApprovalRequest!
-}
-```
-
 ## 7. AI Agent Integration
 
 ### 7.1 Natural Language Interface
@@ -897,7 +808,6 @@ func (c *ContextBuilder) BuildContext(ctx context.Context, event *models.Event, 
 ### Backend
 - **Language**: Go 1.21+
 - **Web Framework**: Chi or Fiber (lightweight, performant)
-- **GraphQL**: gqlgen
 - **Database**: PostgreSQL 15+ (primary), Redis (cache/queue)
 - **ORM**: sqlc (type-safe SQL) or GORM
 - **Migrations**: golang-migrate
@@ -906,9 +816,11 @@ func (c *ContextBuilder) BuildContext(ctx context.Context, event *models.Event, 
 - **Testing**: testify, gomock
 
 ### Frontend
+- **Build Tool**: Vite
 - **Framework**: React 18+ with TypeScript
+- **Styling**: Tailwind CSS
+- **UI Library**: shadcn/ui
 - **State Management**: Zustand or Redux Toolkit
-- **UI Library**: shadcn/ui, Tailwind CSS
 - **Forms**: React Hook Form with Zod validation
 - **Data Fetching**: TanStack Query (React Query)
 - **Visualization**: React Flow (workflow canvas)

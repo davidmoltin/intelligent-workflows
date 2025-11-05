@@ -1011,13 +1011,27 @@ func (i *AIInterpreter) InterpretPrompt(ctx context.Context, prompt string) (*Wo
 
 **Tasks:**
 
-#### 9.1 React Setup
+#### 9.1 React + Vite Setup
 ```bash
+# Create Vite project with React + TypeScript
+npm create vite@latest web -- --template react-ts
 cd web
-npx create-react-app . --template typescript
+
+# Install dependencies
+npm install
+
+# Install UI and state management
 npm install @tanstack/react-query zustand react-router-dom
-npm install @shadcn/ui tailwindcss
-npm install react-flow-renderer recharts
+
+# Install Tailwind CSS
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+# Install shadcn/ui
+npx shadcn-ui@latest init
+
+# Install visualization libraries
+npm install reactflow recharts
 ```
 
 #### 9.2 API Client
@@ -1266,7 +1280,6 @@ By the end of Week 16, the system should:
 ## Post-MVP Enhancements
 
 ### Phase 8+: Advanced Features
-- GraphQL API
 - Workflow versioning and rollback
 - A/B testing for workflows
 - Advanced analytics and ML insights
@@ -1277,6 +1290,7 @@ By the end of Week 16, the system should:
 - Advanced scheduling (cron, calendar-based)
 - Workflow debugging tools
 - Performance profiling
+- WebSocket enhancements for real-time collaboration
 
 ---
 

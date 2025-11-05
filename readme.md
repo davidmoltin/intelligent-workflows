@@ -20,7 +20,7 @@ Intelligent Workflows allows you to:
 - Real-time execution monitoring for agents
 
 ### 🚀 Developer-First
-- **API-First**: Every feature accessible via REST/GraphQL
+- **API-First**: Every feature accessible via REST API
 - **Code as Configuration**: Define workflows in JSON/YAML
 - **Type-Safe**: Go with PostgreSQL for robust, scalable backend
 - **CLI Tool**: Manage workflows from the command line
@@ -48,7 +48,7 @@ Intelligent Workflows allows you to:
 └─────────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────────┐
-│              REST API • GraphQL • WebSockets                 │
+│              REST API • WebSockets                           │
 └─────────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────────┐
@@ -62,7 +62,7 @@ Intelligent Workflows allows you to:
 
 **Technology Stack:**
 - **Backend**: Go 1.21+, Chi/Fiber, PostgreSQL 15+, Redis 7+
-- **Frontend**: React 18+, TypeScript, Tailwind CSS, shadcn/ui
+- **Frontend**: Vite, React 18+, TypeScript, Tailwind CSS, shadcn/ui
 - **Deployment**: Docker, Kubernetes
 - **Monitoring**: Prometheus, Grafana, Jaeger
 
@@ -289,9 +289,9 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for gu
 - Deployment automation
 
 ### Phase 4: Enhanced Features (Post-MVP)
-- GraphQL API
-- Workflow versioning
-- A/B testing
+- Workflow versioning and rollback
+- A/B testing for workflows
+- Advanced analytics and insights
 - Workflow marketplace
 - Mobile app
 

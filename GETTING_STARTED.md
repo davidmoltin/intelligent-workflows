@@ -332,21 +332,24 @@ cd web
 npm install
 
 # Start development server
-npm start
+npm run dev
 
 # Build for production
 npm run build
+
+# Preview production build
+npm run preview
 ```
 
-The React app will run on `http://localhost:3000` and proxy API requests to `http://localhost:8080`.
+The React app will run on `http://localhost:5173` (Vite default) and proxy API requests to `http://localhost:8080`.
 
 ### Available Scripts
 
-- `npm start` - Start development server
+- `npm run dev` - Start development server
 - `npm test` - Run tests
 - `npm run build` - Build for production
+- `npm run preview` - Preview production build
 - `npm run lint` - Lint code
-- `npm run format` - Format code with Prettier
 
 ## Docker Development
 
