@@ -19,9 +19,18 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
-import type { WorkflowDefinition, Step } from '@/types/workflow'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import { ArrowLeft, List, Network } from 'lucide-react'
+import type { WorkflowDefinition, Step, Trigger } from '@/types/workflow'
 import { StepBuilder } from '@/components/StepBuilder'
+import { WorkflowGraphVisualizer } from '@/components/WorkflowGraphVisualizer'
+import { StepEditor } from '@/components/StepEditor'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 export function EditWorkflowPage() {
   const { id } = useParams<{ id: string }>()
@@ -37,6 +46,8 @@ export function EditWorkflowPage() {
   const [eventType, setEventType] = useState('')
   const [schedule, setSchedule] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
+  const [editingStep, setEditingStep] = useState<Step | null>(null)
+  const [isStepEditorOpen, setIsStepEditorOpen] = useState(false)
 
   useEffect(() => {
     if (workflow) {
@@ -80,6 +91,23 @@ export function EditWorkflowPage() {
     } catch (error) {
       console.error('Failed to update workflow:', error)
     }
+  }
+
+  const handleNodeClick = (step: Step) => {
+    setEditingStep(step)
+    setIsStepEditorOpen(true)
+  }
+
+  const handleStepUpdate = (updatedStep: Step) => {
+    setSteps(steps.map(s => s.id === updatedStep.id ? updatedStep : s))
+    setIsStepEditorOpen(false)
+    setEditingStep(null)
+  }
+
+  const trigger: Trigger = {
+    type: triggerType,
+    ...(triggerType === 'event' && { event: eventType }),
+    ...(triggerType === 'schedule' && { schedule }),
   }
 
   if (isLoading) {
@@ -238,7 +266,30 @@ export function EditWorkflowPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <StepBuilder steps={steps} onChange={setSteps} />
+            <Tabs defaultValue="list" className="w-full">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="list" className="flex items-center gap-2">
+                  <List className="h-4 w-4" />
+                  List View
+                </TabsTrigger>
+                <TabsTrigger value="graph" className="flex items-center gap-2">
+                  <Network className="h-4 w-4" />
+                  Graph View
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="list" className="mt-4">
+                <StepBuilder steps={steps} onChange={setSteps} />
+              </TabsContent>
+              <TabsContent value="graph" className="mt-4">
+                <div className="h-[600px] w-full">
+                  <WorkflowGraphVisualizer
+                    trigger={trigger}
+                    steps={steps}
+                    onNodeClick={handleNodeClick}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
@@ -256,6 +307,22 @@ export function EditWorkflowPage() {
           </Button>
         </div>
       </form>
+
+      {/* Step Editor Dialog */}
+      <Dialog open={isStepEditorOpen} onOpenChange={setIsStepEditorOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {editingStep && (
+            <StepEditor
+              step={editingStep}
+              onSave={handleStepUpdate}
+              onCancel={() => {
+                setIsStepEditorOpen(false)
+                setEditingStep(null)
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
