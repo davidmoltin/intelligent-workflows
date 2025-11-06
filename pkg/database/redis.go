@@ -7,16 +7,18 @@ import (
 
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/redis/go-redis/v9"
 )
 
 // RedisClient wraps the Redis connection
 type RedisClient struct {
-	Client *redis.Client
+	Client  *redis.Client
+	metrics *metrics.Metrics
 }
 
 // NewRedisClient creates a new Redis client connection
-func NewRedisClient(cfg *config.Config, log *logger.Logger) (*RedisClient, error) {
+func NewRedisClient(cfg *config.Config, log *logger.Logger, m *metrics.Metrics) (*RedisClient, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisAddr(),
 		Password: cfg.Redis.Password,
@@ -28,6 +30,10 @@ func NewRedisClient(cfg *config.Config, log *logger.Logger) (*RedisClient, error
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
+		// Record connection failure metric
+		if m != nil {
+			m.RedisConnectionsFailed.WithLabelValues("ping").Inc()
+		}
 		return nil, fmt.Errorf("failed to ping redis: %w", err)
 	}
 
@@ -37,7 +43,7 @@ func NewRedisClient(cfg *config.Config, log *logger.Logger) (*RedisClient, error
 		logger.Int("db", cfg.Redis.DB),
 	)
 
-	return &RedisClient{Client: client}, nil
+	return &RedisClient{Client: client, metrics: m}, nil
 }
 
 // Close closes the Redis connection

@@ -8,6 +8,7 @@ import (
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -29,6 +30,7 @@ type WorkflowExecutor struct {
 	executionRepo  ExecutionRepository
 	workflowRepo   WorkflowRepository
 	logger         *logger.Logger
+	metrics        *metrics.Metrics
 	maxRetries     int
 	defaultTimeout time.Duration
 }
@@ -39,6 +41,7 @@ func NewWorkflowExecutor(
 	executionRepo ExecutionRepository,
 	workflowRepo WorkflowRepository,
 	log *logger.Logger,
+	m *metrics.Metrics,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		evaluator:      NewEvaluator(),
@@ -47,6 +50,7 @@ func NewWorkflowExecutor(
 		executionRepo:  executionRepo,
 		workflowRepo:   workflowRepo,
 		logger:         log,
+		metrics:        m,
 		maxRetries:     3,
 		defaultTimeout: 30 * time.Second,
 	}
@@ -59,6 +63,16 @@ func (we *WorkflowExecutor) Execute(
 	triggerEvent string,
 	triggerPayload map[string]interface{},
 ) (*models.WorkflowExecution, error) {
+	// Track execution start time for metrics
+	startTime := time.Now()
+	workflowIDStr := workflow.ID.String()
+
+	// Increment active workflows gauge
+	if we.metrics != nil {
+		we.metrics.ActiveWorkflows.WithLabelValues(workflowIDStr).Inc()
+		defer we.metrics.ActiveWorkflows.WithLabelValues(workflowIDStr).Dec()
+	}
+
 	we.logger.Infof("Starting workflow execution: %s (ID: %s)", workflow.Name, workflow.ID)
 
 	// Get timeout for this workflow (check Definition.Timeout first, then trigger data, then default)
@@ -103,6 +117,12 @@ func (we *WorkflowExecutor) Execute(
 	if err != nil {
 		we.logger.Errorf("Failed to build context: %v", err)
 		we.completeExecution(ctx, execution, models.ExecutionResultFailed, fmt.Sprintf("Context build failed: %v", err))
+		// Record metrics for failed execution
+		if we.metrics != nil {
+			we.metrics.WorkflowExecutionsTotal.WithLabelValues(workflowIDStr, "failed").Inc()
+			we.metrics.WorkflowDuration.WithLabelValues(workflowIDStr).Observe(time.Since(startTime).Seconds())
+			we.metrics.WorkflowErrors.WithLabelValues(workflowIDStr, "context_build_error").Inc()
+		}
 		return execution, err
 	}
 
@@ -120,6 +140,11 @@ func (we *WorkflowExecutor) Execute(
 		// Check if execution was paused (not a real error)
 		if err == ErrExecutionPaused {
 			we.logger.Infof("Workflow execution paused: %s", execution.ExecutionID)
+			// Record metrics for paused execution
+			if we.metrics != nil {
+				we.metrics.WorkflowExecutionsTotal.WithLabelValues(workflowIDStr, "paused").Inc()
+				we.metrics.WorkflowDuration.WithLabelValues(workflowIDStr).Observe(time.Since(startTime).Seconds())
+			}
 			return execution, nil
 		}
 
@@ -128,11 +153,23 @@ func (we *WorkflowExecutor) Execute(
 			we.logger.Errorf("Workflow execution timed out: %s", execution.ExecutionID)
 			timeoutMsg := fmt.Sprintf("Workflow execution timed out after %v", timeout)
 			we.completeExecution(context.Background(), execution, models.ExecutionResultFailed, timeoutMsg)
+			// Record metrics for timeout
+			if we.metrics != nil {
+				we.metrics.WorkflowExecutionsTotal.WithLabelValues(workflowIDStr, "timeout").Inc()
+				we.metrics.WorkflowDuration.WithLabelValues(workflowIDStr).Observe(time.Since(startTime).Seconds())
+				we.metrics.WorkflowErrors.WithLabelValues(workflowIDStr, "timeout").Inc()
+			}
 			return execution, fmt.Errorf("%s: %w", timeoutMsg, ctx.Err())
 		}
 
 		we.logger.Errorf("Workflow execution failed: %v", err)
 		we.completeExecution(ctx, execution, models.ExecutionResultFailed, err.Error())
+		// Record metrics for failed execution
+		if we.metrics != nil {
+			we.metrics.WorkflowExecutionsTotal.WithLabelValues(workflowIDStr, "failed").Inc()
+			we.metrics.WorkflowDuration.WithLabelValues(workflowIDStr).Observe(time.Since(startTime).Seconds())
+			we.metrics.WorkflowErrors.WithLabelValues(workflowIDStr, "execution_error").Inc()
+		}
 		return execution, err
 	}
 
@@ -140,6 +177,12 @@ func (we *WorkflowExecutor) Execute(
 	we.completeExecution(ctx, execution, result, "")
 
 	we.logger.Infof("Workflow execution completed: %s - Result: %s", execution.ExecutionID, result)
+
+	// Record metrics for successful execution
+	if we.metrics != nil {
+		we.metrics.WorkflowExecutionsTotal.WithLabelValues(workflowIDStr, string(result)).Inc()
+		we.metrics.WorkflowDuration.WithLabelValues(workflowIDStr).Observe(time.Since(startTime).Seconds())
+	}
 
 	return execution, nil
 }

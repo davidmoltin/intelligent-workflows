@@ -8,6 +8,7 @@ import (
 
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/sony/gobreaker"
 	_ "github.com/lib/pq"
 )
@@ -17,10 +18,11 @@ type PostgresDB struct {
 	DB             *sql.DB
 	circuitBreaker *gobreaker.CircuitBreaker
 	logger         *logger.Logger
+	metrics        *metrics.Metrics
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection with retry logic
-func NewPostgresDB(cfg *config.Config, log *logger.Logger) (*PostgresDB, error) {
+func NewPostgresDB(cfg *config.Config, log *logger.Logger, m *metrics.Metrics) (*PostgresDB, error) {
 	dsn := cfg.DatabaseDSN()
 
 	// Retry backoff schedule: 1s, 2s, 5s, 10s
@@ -39,6 +41,10 @@ func NewPostgresDB(cfg *config.Config, log *logger.Logger) (*PostgresDB, error) 
 		db, err = sql.Open("postgres", dsn)
 		if err != nil {
 			log.Warnf("Database connection attempt %d/%d failed: %v", attempt+1, len(backoff), err)
+			// Record connection failure metric
+			if m != nil {
+				m.DBConnectionsFailed.WithLabelValues("postgres").Inc()
+			}
 			if attempt < len(backoff)-1 {
 				log.Infof("Retrying in %v...", backoff[attempt])
 				time.Sleep(backoff[attempt])
@@ -72,6 +78,7 @@ func NewPostgresDB(cfg *config.Config, log *logger.Logger) (*PostgresDB, error) 
 				DB:             db,
 				circuitBreaker: cb,
 				logger:         log,
+				metrics:        m,
 			}, nil
 		}
 
@@ -79,10 +86,20 @@ func NewPostgresDB(cfg *config.Config, log *logger.Logger) (*PostgresDB, error) 
 		db.Close()
 		log.Warnf("Database ping attempt %d/%d failed: %v", attempt+1, len(backoff), err)
 
+		// Record ping failure metric
+		if m != nil {
+			m.DBConnectionsFailed.WithLabelValues("postgres").Inc()
+		}
+
 		if attempt < len(backoff)-1 {
 			log.Infof("Retrying in %v...", backoff[attempt])
 			time.Sleep(backoff[attempt])
 		}
+	}
+
+	// Record final connection failure
+	if m != nil {
+		m.DBConnectionsFailed.WithLabelValues("postgres").Inc()
 	}
 
 	return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", len(backoff), err)

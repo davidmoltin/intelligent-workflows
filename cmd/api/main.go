@@ -21,6 +21,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/pkg/llm/providers/anthropic"
 	"github.com/davidmoltin/intelligent-workflows/pkg/llm/providers/openai"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -51,15 +52,19 @@ func run() error {
 		logger.String("environment", cfg.App.Environment),
 	)
 
+	// Initialize Prometheus metrics
+	metricsRegistry := metrics.New()
+	log.Info("Metrics registry initialized")
+
 	// Initialize PostgreSQL
-	db, err := database.NewPostgresDB(cfg, log)
+	db, err := database.NewPostgresDB(cfg, log, metricsRegistry)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer db.Close()
 
 	// Initialize Redis
-	redis, err := database.NewRedisClient(cfg, log)
+	redis, err := database.NewRedisClient(cfg, log, metricsRegistry)
 	if err != nil {
 		return fmt.Errorf("failed to initialize redis: %w", err)
 	}
@@ -77,7 +82,7 @@ func run() error {
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
 
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -188,7 +193,7 @@ func run() error {
 	)
 
 	// Initialize router
-	router := rest.NewRouter(log, h, authService)
+	router := rest.NewRouter(log, h, authService, metricsRegistry)
 	router.SetupRoutes()
 
 	// Create HTTP server
