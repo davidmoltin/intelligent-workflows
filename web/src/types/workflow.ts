@@ -89,7 +89,7 @@ export interface Execution {
   steps?: StepExecution[]
 }
 
-export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'blocked'
+export type ExecutionStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'blocked' | 'cancelled' | 'paused'
 export type ExecutionResult = 'allowed' | 'blocked' | 'executed'
 
 export interface StepExecution {
