@@ -14,10 +14,10 @@ import (
 // AuditRepository defines the interface for audit log persistence
 type AuditRepository interface {
 	CreateAuditLog(ctx context.Context, log *models.AuditLog) error
-	GetAuditLogByID(ctx context.Context, id uuid.UUID) (*models.AuditLog, error)
-	ListAuditLogs(ctx context.Context, filters *postgres.AuditLogFilters, limit, offset int) ([]models.AuditLog, int64, error)
-	GetAuditLogsByEntity(ctx context.Context, entityType string, entityID uuid.UUID, limit, offset int) ([]models.AuditLog, error)
-	GetAuditLogsByActor(ctx context.Context, actorID uuid.UUID, limit, offset int) ([]models.AuditLog, error)
+	GetAuditLogByID(ctx context.Context, organizationID *uuid.UUID, id uuid.UUID) (*models.AuditLog, error)
+	ListAuditLogs(ctx context.Context, organizationID *uuid.UUID, filters *postgres.AuditLogFilters, limit, offset int) ([]models.AuditLog, int64, error)
+	GetAuditLogsByEntity(ctx context.Context, organizationID *uuid.UUID, entityType string, entityID uuid.UUID, limit, offset int) ([]models.AuditLog, error)
+	GetAuditLogsByActor(ctx context.Context, organizationID *uuid.UUID, actorID uuid.UUID, limit, offset int) ([]models.AuditLog, error)
 }
 
 // AuditService handles audit logging
@@ -215,34 +215,57 @@ func (s *AuditService) LogScheduleDeleted(
 }
 
 // GetAuditLog retrieves an audit log by ID
-func (s *AuditService) GetAuditLog(ctx context.Context, id uuid.UUID) (*models.AuditLog, error) {
-	return s.auditRepo.GetAuditLogByID(ctx, id)
+// Pass organizationID for organization-scoped logs, or uuid.Nil for system-level logs
+func (s *AuditService) GetAuditLog(ctx context.Context, organizationID uuid.UUID, id uuid.UUID) (*models.AuditLog, error) {
+	var orgID *uuid.UUID
+	if organizationID != uuid.Nil {
+		orgID = &organizationID
+	}
+	return s.auditRepo.GetAuditLogByID(ctx, orgID, id)
 }
 
 // ListAuditLogs retrieves audit logs with filters
+// Pass organizationID for organization-scoped logs, or uuid.Nil for system-level logs
 func (s *AuditService) ListAuditLogs(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	filters *postgres.AuditLogFilters,
 	limit, offset int,
 ) ([]models.AuditLog, int64, error) {
-	return s.auditRepo.ListAuditLogs(ctx, filters, limit, offset)
+	var orgID *uuid.UUID
+	if organizationID != uuid.Nil {
+		orgID = &organizationID
+	}
+	return s.auditRepo.ListAuditLogs(ctx, orgID, filters, limit, offset)
 }
 
 // GetEntityAuditLogs retrieves audit logs for a specific entity
+// Pass organizationID for organization-scoped logs, or uuid.Nil for system-level logs
 func (s *AuditService) GetEntityAuditLogs(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	entityType string,
 	entityID uuid.UUID,
 	limit, offset int,
 ) ([]models.AuditLog, error) {
-	return s.auditRepo.GetAuditLogsByEntity(ctx, entityType, entityID, limit, offset)
+	var orgID *uuid.UUID
+	if organizationID != uuid.Nil {
+		orgID = &organizationID
+	}
+	return s.auditRepo.GetAuditLogsByEntity(ctx, orgID, entityType, entityID, limit, offset)
 }
 
 // GetActorAuditLogs retrieves audit logs by actor
+// Pass organizationID for organization-scoped logs, or uuid.Nil for system-level logs
 func (s *AuditService) GetActorAuditLogs(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	actorID uuid.UUID,
 	limit, offset int,
 ) ([]models.AuditLog, error) {
-	return s.auditRepo.GetAuditLogsByActor(ctx, actorID, limit, offset)
+	var orgID *uuid.UUID
+	if organizationID != uuid.Nil {
+		orgID = &organizationID
+	}
+	return s.auditRepo.GetAuditLogsByActor(ctx, orgID, actorID, limit, offset)
 }

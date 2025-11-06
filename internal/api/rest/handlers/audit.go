@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -28,6 +29,13 @@ func NewAuditHandler(log *logger.Logger, auditService *services.AuditService) *A
 
 // ListAuditLogs handles GET /api/v1/audit-logs
 func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	// Parse query parameters
 	entityType := r.URL.Query().Get("entity_type")
 	entityIDStr := r.URL.Query().Get("entity_id")
@@ -106,7 +114,7 @@ func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get audit logs
-	logs, total, err := h.auditService.ListAuditLogs(r.Context(), filters, limit, offset)
+	logs, total, err := h.auditService.ListAuditLogs(r.Context(), organizationID, filters, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list audit logs: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to retrieve audit logs")
@@ -126,6 +134,13 @@ func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 // GetAuditLog handles GET /api/v1/audit-logs/:id
 func (h *AuditHandler) GetAuditLog(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -134,7 +149,7 @@ func (h *AuditHandler) GetAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log, err := h.auditService.GetAuditLog(r.Context(), id)
+	log, err := h.auditService.GetAuditLog(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get audit log: %v", err)
 		RespondError(w, http.StatusNotFound, "Audit log not found")
@@ -146,6 +161,13 @@ func (h *AuditHandler) GetAuditLog(w http.ResponseWriter, r *http.Request) {
 
 // GetEntityAuditLogs handles GET /api/v1/audit-logs/entity/:entity_type/:entity_id
 func (h *AuditHandler) GetEntityAuditLogs(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	entityType := chi.URLParam(r, "entity_type")
 	entityIDStr := chi.URLParam(r, "entity_id")
 
@@ -174,7 +196,7 @@ func (h *AuditHandler) GetEntityAuditLogs(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get audit logs for entity
-	logs, err := h.auditService.GetEntityAuditLogs(r.Context(), entityType, entityID, limit, offset)
+	logs, err := h.auditService.GetEntityAuditLogs(r.Context(), organizationID, entityType, entityID, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to get entity audit logs: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to retrieve entity audit logs")
@@ -193,6 +215,13 @@ func (h *AuditHandler) GetEntityAuditLogs(w http.ResponseWriter, r *http.Request
 
 // GetActorAuditLogs handles GET /api/v1/audit-logs/actor/:actor_id
 func (h *AuditHandler) GetActorAuditLogs(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	actorIDStr := chi.URLParam(r, "actor_id")
 
 	actorID, err := uuid.Parse(actorIDStr)
@@ -220,7 +249,7 @@ func (h *AuditHandler) GetActorAuditLogs(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get audit logs for actor
-	logs, err := h.auditService.GetActorAuditLogs(r.Context(), actorID, limit, offset)
+	logs, err := h.auditService.GetActorAuditLogs(r.Context(), organizationID, actorID, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to get actor audit logs: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to retrieve actor audit logs")
