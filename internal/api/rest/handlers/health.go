@@ -16,17 +16,19 @@ type HealthChecker interface {
 
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
-	logger *logger.Logger
-	db     HealthChecker
-	redis  HealthChecker
+	logger  *logger.Logger
+	db      HealthChecker
+	redis   HealthChecker
+	version string
 }
 
 // NewHealthHandler creates a new health handler
-func NewHealthHandler(log *logger.Logger, db, redis HealthChecker) *HealthHandler {
+func NewHealthHandler(log *logger.Logger, db, redis HealthChecker, version string) *HealthHandler {
 	return &HealthHandler{
-		logger: log,
-		db:     db,
-		redis:  redis,
+		logger:  log,
+		db:      db,
+		redis:   redis,
+		version: version,
 	}
 }
 
@@ -41,7 +43,7 @@ type HealthResponse struct {
 func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	response := HealthResponse{
 		Status:  "ok",
-		Version: "0.1.0", // TODO: Get from config
+		Version: h.version,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -87,7 +89,7 @@ func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 
 	response := HealthResponse{
 		Status:  status,
-		Version: "0.1.0", // TODO: Get from config
+		Version: h.version,
 		Checks:  checks,
 	}
 

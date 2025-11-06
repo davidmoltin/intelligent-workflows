@@ -145,7 +145,7 @@ func run() error {
 	}
 
 	// Initialize services
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, cfg.App.DefaultApproverEmail)
 	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
 
 	// Initialize and start approval expiration worker
@@ -172,6 +172,7 @@ func run() error {
 			DB:    db,
 			Redis: redis,
 		},
+		cfg.App.Version,
 	)
 
 	// Initialize router
