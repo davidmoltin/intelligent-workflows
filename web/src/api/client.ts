@@ -6,6 +6,15 @@ import type {
   ApprovalRequest,
   IngestEventRequest,
 } from '@/types/workflow'
+import type {
+  AnalyticsDashboard,
+  ExecutionStats,
+  ExecutionTrend,
+  WorkflowStats,
+  ExecutionError,
+  StepStats,
+  TimeRange,
+} from '@/types/analytics'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
@@ -187,6 +196,62 @@ export const healthAPI = {
       version: string
       checks: Record<string, string>
     }>('/ready')
+  },
+}
+
+// Analytics API
+export const analyticsAPI = {
+  getDashboard: async (params?: { workflow_id?: string; time_range?: TimeRange }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.workflow_id) queryParams.set('workflow_id', params.workflow_id)
+    if (params?.time_range) queryParams.set('time_range', params.time_range)
+
+    const query = queryParams.toString()
+    return fetchAPI<AnalyticsDashboard>(`/analytics/dashboard${query ? `?${query}` : ''}`)
+  },
+
+  getExecutionStats: async (params?: { workflow_id?: string; time_range?: TimeRange }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.workflow_id) queryParams.set('workflow_id', params.workflow_id)
+    if (params?.time_range) queryParams.set('time_range', params.time_range)
+
+    const query = queryParams.toString()
+    return fetchAPI<ExecutionStats>(`/analytics/stats${query ? `?${query}` : ''}`)
+  },
+
+  getExecutionTrends: async (params?: { workflow_id?: string; time_range?: TimeRange; interval?: string }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.workflow_id) queryParams.set('workflow_id', params.workflow_id)
+    if (params?.time_range) queryParams.set('time_range', params.time_range)
+    if (params?.interval) queryParams.set('interval', params.interval)
+
+    const query = queryParams.toString()
+    return fetchAPI<ExecutionTrend[]>(`/analytics/trends${query ? `?${query}` : ''}`)
+  },
+
+  getWorkflowStats: async (params?: { time_range?: TimeRange }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.time_range) queryParams.set('time_range', params.time_range)
+
+    const query = queryParams.toString()
+    return fetchAPI<WorkflowStats[]>(`/analytics/workflows${query ? `?${query}` : ''}`)
+  },
+
+  getRecentErrors: async (params?: { workflow_id?: string }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.workflow_id) queryParams.set('workflow_id', params.workflow_id)
+
+    const query = queryParams.toString()
+    return fetchAPI<ExecutionError[]>(`/analytics/errors${query ? `?${query}` : ''}`)
+  },
+
+  getStepStats: async (params?: { workflow_id?: string; time_range?: TimeRange }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.workflow_id) queryParams.set('workflow_id', params.workflow_id)
+    if (params?.time_range) queryParams.set('time_range', params.time_range)
+
+    const query = queryParams.toString()
+    return fetchAPI<StepStats[]>(`/analytics/steps${query ? `?${query}` : ''}`)
   },
 }
 

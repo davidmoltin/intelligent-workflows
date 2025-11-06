@@ -153,6 +153,16 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("approval:approve", r.logger)).Post("/{id}/approve", r.handlers.Approval.ApproveRequest)
 				router.With(customMiddleware.RequirePermission("approval:reject", r.logger)).Post("/{id}/reject", r.handlers.Approval.RejectRequest)
 			})
+
+			// Analytics
+			router.Route("/analytics", func(router chi.Router) {
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/dashboard", r.handlers.Analytics.GetDashboard)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/stats", r.handlers.Analytics.GetExecutionStats)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/trends", r.handlers.Analytics.GetExecutionTrends)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/workflows", r.handlers.Analytics.GetWorkflowStats)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/errors", r.handlers.Analytics.GetRecentErrors)
+				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/steps", r.handlers.Analytics.GetStepStats)
+			})
 		})
 
 		// AI endpoints (only if AI service is configured)

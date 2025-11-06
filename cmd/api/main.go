@@ -69,6 +69,7 @@ func run() error {
 	// Initialize repositories
 	workflowRepo := postgres.NewWorkflowRepository(db.DB)
 	executionRepo := postgres.NewExecutionRepository(db.DB)
+	analyticsRepo := postgres.NewAnalyticsRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
 	userRepo := postgres.NewUserRepository(db.DB)
@@ -167,6 +168,7 @@ func run() error {
 		log,
 		workflowRepo,
 		executionRepo,
+		analyticsRepo,
 		eventRouter,
 		approvalService,
 		authService,
