@@ -61,6 +61,13 @@ func (we *WorkflowExecutor) Execute(
 ) (*models.WorkflowExecution, error) {
 	we.logger.Infof("Starting workflow execution: %s (ID: %s)", workflow.Name, workflow.ID)
 
+	// Get timeout for this workflow (from metadata or use default)
+	timeout := we.getWorkflowTimeout(workflow)
+
+	// Create timeout context
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// Create execution record
 	execution := &models.WorkflowExecution{
 		ID:             uuid.New(),
@@ -73,20 +80,23 @@ func (we *WorkflowExecutor) Execute(
 		Metadata:       make(models.JSONB),
 	}
 
-	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
+	// Store timeout in metadata for observability
+	execution.Metadata["timeout_seconds"] = timeout.Seconds()
+
+	if err := we.executionRepo.CreateExecution(timeoutCtx, execution); err != nil {
 		return nil, fmt.Errorf("failed to create execution: %w", err)
 	}
 
 	// Build execution context
-	execContext, err := we.contextBuilder.BuildContext(ctx, triggerPayload, workflow.Definition.Context)
+	execContext, err := we.contextBuilder.BuildContext(timeoutCtx, triggerPayload, workflow.Definition.Context)
 	if err != nil {
 		we.logger.Errorf("Failed to build context: %v", err)
-		we.completeExecution(ctx, execution, models.ExecutionResultFailed, fmt.Sprintf("Context build failed: %v", err))
+		we.completeExecution(timeoutCtx, execution, models.ExecutionResultFailed, fmt.Sprintf("Context build failed: %v", err))
 		return execution, err
 	}
 
 	// Enrich context
-	if err := we.contextBuilder.EnrichContext(ctx, execContext); err != nil {
+	if err := we.contextBuilder.EnrichContext(timeoutCtx, execContext); err != nil {
 		we.logger.Warnf("Failed to enrich context: %v", err)
 		// Continue execution even if enrichment fails
 	}
@@ -94,7 +104,7 @@ func (we *WorkflowExecutor) Execute(
 	execution.Context = execContext
 
 	// Execute workflow steps
-	result, err := we.executeSteps(ctx, execution, workflow, execContext)
+	result, err := we.executeSteps(timeoutCtx, execution, workflow, execContext)
 	if err != nil {
 		// Check if execution was paused (not a real error)
 		if err == ErrExecutionPaused {
@@ -102,13 +112,21 @@ func (we *WorkflowExecutor) Execute(
 			return execution, nil
 		}
 
+		// Check if execution timed out
+		if timeoutCtx.Err() == context.DeadlineExceeded {
+			we.logger.Errorf("Workflow execution timed out after %v: %s", timeout, execution.ExecutionID)
+			we.completeExecution(context.Background(), execution, models.ExecutionResultFailed,
+				fmt.Sprintf("Execution timed out after %v", timeout))
+			return execution, fmt.Errorf("workflow execution timed out after %v", timeout)
+		}
+
 		we.logger.Errorf("Workflow execution failed: %v", err)
-		we.completeExecution(ctx, execution, models.ExecutionResultFailed, err.Error())
+		we.completeExecution(timeoutCtx, execution, models.ExecutionResultFailed, err.Error())
 		return execution, err
 	}
 
 	// Complete execution successfully
-	we.completeExecution(ctx, execution, result, "")
+	we.completeExecution(timeoutCtx, execution, result, "")
 
 	we.logger.Infof("Workflow execution completed: %s - Result: %s", execution.ExecutionID, result)
 
@@ -139,6 +157,17 @@ func (we *WorkflowExecutor) executeSteps(
 
 	// Execute steps
 	for currentStepID != "" {
+		// Check for context cancellation (timeout or manual cancellation)
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				return models.ExecutionResultFailed, fmt.Errorf("workflow execution timed out")
+			}
+			return models.ExecutionResultFailed, ctx.Err()
+		default:
+			// Continue execution
+		}
+
 		step, exists := stepMap[currentStepID]
 		if !exists {
 			return models.ExecutionResultFailed, fmt.Errorf("step not found: %s", currentStepID)
@@ -805,4 +834,25 @@ func (we *WorkflowExecutor) continueFromStep(
 	}
 
 	return finalResult, nil
+}
+
+// getWorkflowTimeout returns the timeout duration for a workflow
+// It checks workflow metadata for a custom timeout, otherwise uses the default
+func (we *WorkflowExecutor) getWorkflowTimeout(workflow *models.Workflow) time.Duration {
+	// Check if workflow has custom timeout in metadata
+	if workflow.Definition.Trigger.Data != nil {
+		if timeoutVal, ok := workflow.Definition.Trigger.Data["timeout_seconds"]; ok {
+			// Try to convert to float64 (JSON numbers are float64)
+			if timeoutSeconds, ok := timeoutVal.(float64); ok && timeoutSeconds > 0 {
+				return time.Duration(timeoutSeconds) * time.Second
+			}
+			// Try to convert to int
+			if timeoutSeconds, ok := timeoutVal.(int); ok && timeoutSeconds > 0 {
+				return time.Duration(timeoutSeconds) * time.Second
+			}
+		}
+	}
+
+	// Return default timeout
+	return we.defaultTimeout
 }
