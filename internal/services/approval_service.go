@@ -13,11 +13,11 @@ import (
 // ApprovalRepository defines the interface for approval persistence
 type ApprovalRepository interface {
 	CreateApproval(ctx context.Context, approval *models.ApprovalRequest) error
-	UpdateApproval(ctx context.Context, approval *models.ApprovalRequest) error
-	GetApprovalByID(ctx context.Context, id uuid.UUID) (*models.ApprovalRequest, error)
-	GetApprovalByRequestID(ctx context.Context, requestID string) (*models.ApprovalRequest, error)
-	ListApprovals(ctx context.Context, status *models.ApprovalStatus, approverID *uuid.UUID, limit, offset int) ([]models.ApprovalRequest, int64, error)
-	GetApprovalsByExecution(ctx context.Context, executionID uuid.UUID) ([]models.ApprovalRequest, error)
+	UpdateApprovalStatus(ctx context.Context, organizationID, id uuid.UUID, status models.ApprovalStatus, approverID *uuid.UUID, decision *string, decidedAt *time.Time) error
+	GetApprovalByID(ctx context.Context, organizationID, id uuid.UUID) (*models.ApprovalRequest, error)
+	GetApprovalByRequestID(ctx context.Context, organizationID uuid.UUID, requestID string) (*models.ApprovalRequest, error)
+	ListApprovals(ctx context.Context, organizationID uuid.UUID, status *models.ApprovalStatus, approverID *uuid.UUID, limit, offset int) ([]models.ApprovalRequest, int64, error)
+	GetExpiredApprovals(ctx context.Context, organizationID uuid.UUID, limit int) ([]models.ApprovalRequest, error)
 }
 
 // WorkflowResumer defines interface for resuming workflows
@@ -108,6 +108,7 @@ func (s *ApprovalService) CreateApprovalRequest(
 // ApproveRequest approves an approval request
 func (s *ApprovalService) ApproveRequest(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	approvalID uuid.UUID,
 	approverID uuid.UUID,
 	reason *string,
@@ -115,7 +116,7 @@ func (s *ApprovalService) ApproveRequest(
 	s.logger.Infof("Approving request: %s by approver: %s", approvalID, approverID)
 
 	// Get approval
-	approval, err := s.approvalRepo.GetApprovalByID(ctx, approvalID)
+	approval, err := s.approvalRepo.GetApprovalByID(ctx, organizationID, approvalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approval: %w", err)
 	}
@@ -131,14 +132,17 @@ func (s *ApprovalService) ApproveRequest(
 	}
 
 	// Update approval
-	approval.Status = models.ApprovalStatusApproved
-	approval.ApproverID = &approverID
-	approval.DecisionReason = reason
 	now := time.Now()
-	approval.DecidedAt = &now
+	newStatus := models.ApprovalStatusApproved
 
-	if err := s.approvalRepo.UpdateApproval(ctx, approval); err != nil {
+	if err := s.approvalRepo.UpdateApprovalStatus(ctx, organizationID, approvalID, newStatus, &approverID, reason, &now); err != nil {
 		return nil, fmt.Errorf("failed to update approval: %w", err)
+	}
+
+	// Get updated approval
+	approval, err = s.approvalRepo.GetApprovalByID(ctx, organizationID, approvalID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated approval: %w", err)
 	}
 
 	s.logger.Infof("Approval request approved: %s", approval.RequestID)
@@ -172,6 +176,7 @@ func (s *ApprovalService) ApproveRequest(
 // RejectRequest rejects an approval request
 func (s *ApprovalService) RejectRequest(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	approvalID uuid.UUID,
 	approverID uuid.UUID,
 	reason *string,
@@ -179,7 +184,7 @@ func (s *ApprovalService) RejectRequest(
 	s.logger.Infof("Rejecting request: %s by approver: %s", approvalID, approverID)
 
 	// Get approval
-	approval, err := s.approvalRepo.GetApprovalByID(ctx, approvalID)
+	approval, err := s.approvalRepo.GetApprovalByID(ctx, organizationID, approvalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approval: %w", err)
 	}
@@ -195,14 +200,17 @@ func (s *ApprovalService) RejectRequest(
 	}
 
 	// Update approval
-	approval.Status = models.ApprovalStatusRejected
-	approval.ApproverID = &approverID
-	approval.DecisionReason = reason
 	now := time.Now()
-	approval.DecidedAt = &now
+	newStatus := models.ApprovalStatusRejected
 
-	if err := s.approvalRepo.UpdateApproval(ctx, approval); err != nil {
+	if err := s.approvalRepo.UpdateApprovalStatus(ctx, organizationID, approvalID, newStatus, &approverID, reason, &now); err != nil {
 		return nil, fmt.Errorf("failed to update approval: %w", err)
+	}
+
+	// Get updated approval
+	approval, err = s.approvalRepo.GetApprovalByID(ctx, organizationID, approvalID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated approval: %w", err)
 	}
 
 	s.logger.Infof("Approval request rejected: %s", approval.RequestID)
@@ -234,28 +242,30 @@ func (s *ApprovalService) RejectRequest(
 }
 
 // GetApproval retrieves an approval by ID
-func (s *ApprovalService) GetApproval(ctx context.Context, approvalID uuid.UUID) (*models.ApprovalRequest, error) {
-	return s.approvalRepo.GetApprovalByID(ctx, approvalID)
+func (s *ApprovalService) GetApproval(ctx context.Context, organizationID, approvalID uuid.UUID) (*models.ApprovalRequest, error) {
+	return s.approvalRepo.GetApprovalByID(ctx, organizationID, approvalID)
 }
 
 // ListPendingApprovals retrieves pending approvals for an approver
 func (s *ApprovalService) ListPendingApprovals(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	approverID *uuid.UUID,
 	limit, offset int,
 ) ([]models.ApprovalRequest, int64, error) {
 	status := models.ApprovalStatusPending
-	return s.approvalRepo.ListApprovals(ctx, &status, approverID, limit, offset)
+	return s.approvalRepo.ListApprovals(ctx, organizationID, &status, approverID, limit, offset)
 }
 
 // ListApprovals retrieves approvals with filters
 func (s *ApprovalService) ListApprovals(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	status *models.ApprovalStatus,
 	approverID *uuid.UUID,
 	limit, offset int,
 ) ([]models.ApprovalRequest, int64, error) {
-	return s.approvalRepo.ListApprovals(ctx, status, approverID, limit, offset)
+	return s.approvalRepo.ListApprovals(ctx, organizationID, status, approverID, limit, offset)
 }
 
 // ExpireOldApprovals marks expired approvals as expired

@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/validator"
+	"github.com/google/uuid"
 )
 
 // EventHandler handles event-related HTTP requests
@@ -26,6 +28,13 @@ func NewEventHandler(log *logger.Logger, eventRouter *engine.EventRouter) *Event
 
 // CreateEvent handles POST /api/v1/events
 func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	var req models.CreateEventRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -45,7 +54,7 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		req.Source = "api"
 	}
 
-	// Route event to workflows
+	// Route event to workflows (EventRouter will be updated in Phase 3 to handle organizationID)
 	event, err := h.eventRouter.RouteEvent(r.Context(), req.EventType, req.Source, req.Payload)
 	if err != nil {
 		h.logger.Errorf("Failed to route event: %v", err)
