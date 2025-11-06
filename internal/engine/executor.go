@@ -22,6 +22,11 @@ type ExecutionRepository interface {
 	UpdateStepExecution(ctx context.Context, step *models.StepExecution) error
 }
 
+// RuleService interface for loading rules
+type RuleService interface {
+	GetByRuleID(ctx context.Context, ruleID string) (*models.Rule, error)
+}
+
 // WorkflowExecutor executes workflows
 type WorkflowExecutor struct {
 	evaluator      *Evaluator
@@ -29,6 +34,7 @@ type WorkflowExecutor struct {
 	actionExecutor *ActionExecutor
 	executionRepo  ExecutionRepository
 	workflowRepo   WorkflowRepository
+	ruleService    RuleService
 	logger         *logger.Logger
 	metrics        *metrics.Metrics
 	maxRetries     int
@@ -54,6 +60,11 @@ func NewWorkflowExecutor(
 		maxRetries:     3,
 		defaultTimeout: 30 * time.Second,
 	}
+}
+
+// SetRuleService sets the rule service for the executor (optional dependency)
+func (we *WorkflowExecutor) SetRuleService(ruleService RuleService) {
+	we.ruleService = ruleService
 }
 
 // Execute executes a workflow
@@ -387,11 +398,46 @@ func (we *WorkflowExecutor) executeConditionStep(
 	step *models.Step,
 	execContext map[string]interface{},
 ) (string, error) {
-	if step.Condition == nil {
-		return "", fmt.Errorf("condition step has no condition defined")
+	var condition *models.Condition
+
+	// Check if step references a rule
+	if step.RuleID != "" {
+		if we.ruleService == nil {
+			return "", fmt.Errorf("rule_id specified but rule service not configured")
+		}
+
+		// Load the rule
+		rule, err := we.ruleService.GetByRuleID(ctx, step.RuleID)
+		if err != nil {
+			return "", fmt.Errorf("failed to load rule %s: %w", step.RuleID, err)
+		}
+
+		// Check if rule is enabled
+		if !rule.Enabled {
+			return "", fmt.Errorf("rule %s is disabled", step.RuleID)
+		}
+
+		// Check if rule is a condition type
+		if rule.RuleType != models.RuleTypeCondition {
+			return "", fmt.Errorf("rule %s is not a condition rule (type: %s)", step.RuleID, rule.RuleType)
+		}
+
+		// Use the first condition from the rule definition
+		if len(rule.Definition.Conditions) == 0 {
+			return "", fmt.Errorf("rule %s has no conditions defined", step.RuleID)
+		}
+
+		condition = &rule.Definition.Conditions[0]
+		we.logger.Infof("Using rule %s for condition evaluation", step.RuleID)
+	} else if step.Condition != nil {
+		// Use inline condition
+		condition = step.Condition
+	} else {
+		return "", fmt.Errorf("condition step has no condition or rule_id defined")
 	}
 
-	result, err := we.evaluator.EvaluateCondition(step.Condition, execContext)
+	// Evaluate the condition
+	result, err := we.evaluator.EvaluateCondition(condition, execContext)
 	if err != nil {
 		return "", fmt.Errorf("condition evaluation failed: %w", err)
 	}

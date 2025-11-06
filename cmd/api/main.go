@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
@@ -80,9 +81,16 @@ func run() error {
 	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
+	ruleRepo := postgres.NewRuleRepository(db.DB)
 
 	// Initialize workflow engine components
+	evaluator := engine.NewEvaluator()
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry)
+
+	// Initialize rule service and connect to executor
+	ruleService := services.NewRuleService(ruleRepo, evaluator, redis, log)
+	executor.SetRuleService(ruleService)
+
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -185,6 +193,7 @@ func run() error {
 		scheduleService,
 		workflowResumer,
 		aiService,
+		ruleService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,

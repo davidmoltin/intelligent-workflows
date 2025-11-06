@@ -186,6 +186,23 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Schedule.DeleteSchedule)
 				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}/next-runs", r.handlers.Schedule.GetNextRuns)
 			})
+
+			// Rules
+			router.Route("/rules", func(router chi.Router) {
+				// Read operations
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/", r.handlers.Rule.List)
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}", r.handlers.Rule.Get)
+
+				// Write operations
+				router.With(customMiddleware.RequirePermission("workflow:create", r.logger)).Post("/", r.handlers.Rule.Create)
+				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Put("/{id}", r.handlers.Rule.Update)
+				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Rule.Delete)
+				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/enable", r.handlers.Rule.Enable)
+				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/disable", r.handlers.Rule.Disable)
+
+				// Test operation
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Post("/{id}/test", r.handlers.Rule.TestRule)
+			})
 		})
 
 		// AI endpoints (only if AI service is configured)

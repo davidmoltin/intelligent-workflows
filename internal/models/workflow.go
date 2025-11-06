@@ -48,6 +48,7 @@ type ContextDefinition struct {
 type Step struct {
 	ID        string                 `json:"id"`
 	Type      string                 `json:"type"` // condition, action, parallel, execute, wait
+	RuleID    string                 `json:"rule_id,omitempty"`    // Reference to a named rule (for condition steps)
 	Condition *Condition             `json:"condition,omitempty"`
 	Action    *Action                `json:"action,omitempty"`
 	OnTrue    string                 `json:"on_true,omitempty"`
