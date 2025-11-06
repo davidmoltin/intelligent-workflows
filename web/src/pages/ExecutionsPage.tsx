@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useExecutions } from '@/api/hooks'
+import { useExecutions, useWorkflows } from '@/api/hooks'
 import {
   Card,
   CardContent,
@@ -17,10 +18,43 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Eye, Filter, X } from 'lucide-react'
+import type { ExecutionStatus } from '@/types/workflow'
+
+const EXECUTION_STATUSES: ExecutionStatus[] = [
+  'pending',
+  'running',
+  'waiting',
+  'completed',
+  'failed',
+  'blocked',
+  'cancelled',
+  'paused',
+]
 
 export function ExecutionsPage() {
-  const { data: executions, isLoading, error } = useExecutions()
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [workflowFilter, setWorkflowFilter] = useState<string>('')
+
+  const { data: workflows } = useWorkflows()
+  const { data: executions, isLoading, error } = useExecutions({
+    status: statusFilter || undefined,
+    workflow_id: workflowFilter || undefined,
+  })
+
+  const clearFilters = () => {
+    setStatusFilter('')
+    setWorkflowFilter('')
+  }
+
+  const hasActiveFilters = statusFilter || workflowFilter
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -31,6 +65,14 @@ export function ExecutionsPage() {
       case 'failed':
         return 'destructive'
       case 'blocked':
+        return 'outline'
+      case 'pending':
+        return 'outline'
+      case 'waiting':
+        return 'secondary'
+      case 'cancelled':
+        return 'outline'
+      case 'paused':
         return 'outline'
       default:
         return 'outline'
@@ -82,6 +124,85 @@ export function ExecutionsPage() {
           Monitor workflow execution history and performance
         </p>
       </div>
+
+      {/* Filters */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Filters</CardTitle>
+            {hasActiveFilters && (
+              <Badge variant="secondary" className="ml-2">
+                Active
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            {/* Status Filter */}
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select
+                value={statusFilter || 'all'}
+                onValueChange={(value) =>
+                  setStatusFilter(value === 'all' ? '' : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {EXECUTION_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Workflow Filter */}
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium mb-2 block">Workflow</label>
+              <Select
+                value={workflowFilter || 'all'}
+                onValueChange={(value) =>
+                  setWorkflowFilter(value === 'all' ? '' : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Workflows" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Workflows</SelectItem>
+                  {workflows?.map((workflow) => (
+                    <SelectItem key={workflow.id} value={workflow.id}>
+                      {workflow.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={clearFilters}
+                  className="gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
