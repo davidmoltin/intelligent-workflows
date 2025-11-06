@@ -17,8 +17,15 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Edit, Trash2 } from 'lucide-react'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import { ArrowLeft, Edit, Trash2, List, Network } from 'lucide-react'
 import { DeleteWorkflowDialog } from '@/components/DeleteWorkflowDialog'
+import { WorkflowGraphVisualizer } from '@/components/WorkflowGraphVisualizer'
 
 export function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -211,80 +218,103 @@ export function WorkflowDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {workflow.definition.steps.map((step, index) => (
-              <Card key={step.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge>{step.type}</Badge>
-                      <CardTitle className="text-base">
-                        {step.name || step.id}
-                      </CardTitle>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      Step {index + 1}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm space-y-1">
-                    <div className="text-muted-foreground">ID: {step.id}</div>
-                    {step.next && (
-                      <div className="text-muted-foreground">
-                        Next: {step.next}
-                      </div>
-                    )}
-                    {step.type === 'condition' && step.condition && (
-                      <div className="mt-2 p-2 bg-muted rounded-md">
-                        <div className="font-medium">Condition:</div>
-                        <div className="font-mono text-xs">
-                          {step.condition.field} {step.condition.operator}{' '}
-                          {JSON.stringify(step.condition.value)}
+          <Tabs defaultValue="graph" className="w-full">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="graph" className="flex items-center gap-2">
+                <Network className="h-4 w-4" />
+                Graph View
+              </TabsTrigger>
+              <TabsTrigger value="list" className="flex items-center gap-2">
+                <List className="h-4 w-4" />
+                List View
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="graph" className="mt-4">
+              <div className="h-[600px] w-full">
+                <WorkflowGraphVisualizer
+                  trigger={workflow.definition.trigger}
+                  steps={workflow.definition.steps}
+                  readonly={true}
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="list" className="mt-4">
+              <div className="space-y-4">
+                {workflow.definition.steps.map((step, index) => (
+                  <Card key={step.id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge>{step.type}</Badge>
+                          <CardTitle className="text-base">
+                            {step.name || step.id}
+                          </CardTitle>
                         </div>
-                        {step.on_true && (
-                          <div className="text-muted-foreground">
-                            On True: {step.on_true}
-                          </div>
-                        )}
-                        {step.on_false && (
-                          <div className="text-muted-foreground">
-                            On False: {step.on_false}
-                          </div>
-                        )}
+                        <span className="text-sm text-muted-foreground">
+                          Step {index + 1}
+                        </span>
                       </div>
-                    )}
-                    {step.type === 'action' && step.action && (
-                      <div className="mt-2 p-2 bg-muted rounded-md">
-                        <div className="font-medium">Action:</div>
-                        <div>{step.action.action}</div>
-                        {step.action.reason && (
-                          <div className="text-muted-foreground text-xs">
-                            {step.action.reason}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm space-y-1">
+                        <div className="text-muted-foreground">ID: {step.id}</div>
+                        {step.next && (
+                          <div className="text-muted-foreground">
+                            Next: {step.next}
                           </div>
                         )}
-                      </div>
-                    )}
-                    {step.type === 'execute' && step.execute && (
-                      <div className="mt-2 p-2 bg-muted rounded-md">
-                        <div className="font-medium">Execute Actions:</div>
-                        {step.execute.map((action, i) => (
-                          <div key={i} className="text-xs">
-                            {action.type}
-                            {action.config && (
-                              <pre className="mt-1 text-xs overflow-auto">
-                                {JSON.stringify(action.config, null, 2)}
-                              </pre>
+                        {step.type === 'condition' && step.condition && (
+                          <div className="mt-2 p-2 bg-muted rounded-md">
+                            <div className="font-medium">Condition:</div>
+                            <div className="font-mono text-xs">
+                              {step.condition.field} {step.condition.operator}{' '}
+                              {JSON.stringify(step.condition.value)}
+                            </div>
+                            {step.on_true && (
+                              <div className="text-muted-foreground">
+                                On True: {step.on_true}
+                              </div>
+                            )}
+                            {step.on_false && (
+                              <div className="text-muted-foreground">
+                                On False: {step.on_false}
+                              </div>
                             )}
                           </div>
-                        ))}
+                        )}
+                        {step.type === 'action' && step.action && (
+                          <div className="mt-2 p-2 bg-muted rounded-md">
+                            <div className="font-medium">Action:</div>
+                            <div>{step.action.action}</div>
+                            {step.action.reason && (
+                              <div className="text-muted-foreground text-xs">
+                                {step.action.reason}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {step.type === 'execute' && step.execute && (
+                          <div className="mt-2 p-2 bg-muted rounded-md">
+                            <div className="font-medium">Execute Actions:</div>
+                            {step.execute.map((action, i) => (
+                              <div key={i} className="text-xs">
+                                {action.type}
+                                {action.config && (
+                                  <pre className="mt-1 text-xs overflow-auto">
+                                    {JSON.stringify(action.config, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
