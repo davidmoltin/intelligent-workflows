@@ -7,10 +7,26 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
+
+// getTestContextEnrichmentConfigForExecutor returns a test configuration with enrichment disabled
+func getTestContextEnrichmentConfigForExecutor() *config.ContextEnrichmentConfig {
+	return &config.ContextEnrichmentConfig{
+		Enabled:    false,
+		BaseURL:    "http://localhost:8081",
+		Timeout:    10 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: 500 * time.Millisecond,
+		CacheTTL:   5 * time.Minute,
+		EndpointMapping: map[string]string{
+			"order.details": "/api/v1/orders/{id}/details",
+		},
+	}
+}
 
 // Mock ExecutionRepository
 type mockExecutionRepo struct {
@@ -75,7 +91,7 @@ func TestExecuteWaitStep(t *testing.T) {
 			Addr: "localhost:6379",
 		})
 
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:          uuid.New(),
@@ -127,7 +143,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles missing wait config", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -150,7 +166,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles invalid timeout duration", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -229,7 +245,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:         workflowID,
@@ -296,7 +312,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -327,7 +343,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -347,7 +363,7 @@ func TestExecuteConditionStep(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	repo := &mockExecutionRepo{}
-	executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+	executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 	ctx := context.Background()
 
 	t.Run("evaluates true condition", func(t *testing.T) {
@@ -465,7 +481,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		// Create a workflow with a single step
 		workflow := &models.Workflow{
@@ -533,7 +549,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:   uuid.New(),
@@ -603,7 +619,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:   uuid.New(),
@@ -646,7 +662,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 func TestGetWorkflowTimeout(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, &mockExecutionRepo{}, nil, log)
+	executor := NewWorkflowExecutor(redisClient, &mockExecutionRepo{}, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 	tests := []struct {
 		name     string

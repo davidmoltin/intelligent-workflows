@@ -3,16 +3,36 @@ package engine
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/redis/go-redis/v9"
 )
 
+// getTestContextEnrichmentConfig returns a test configuration with enrichment disabled
+func getTestContextEnrichmentConfig() *config.ContextEnrichmentConfig {
+	return &config.ContextEnrichmentConfig{
+		Enabled:    false, // Disabled for tests by default
+		BaseURL:    "http://localhost:8081",
+		Timeout:    10 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: 500 * time.Millisecond,
+		CacheTTL:   5 * time.Minute,
+		EndpointMapping: map[string]string{
+			"order.details":     "/api/v1/orders/{id}/details",
+			"customer.history":  "/api/v1/customers/{id}/history",
+			"product.inventory": "/api/v1/products/{id}/inventory",
+		},
+	}
+}
+
 func TestBuildContext(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	builder := NewContextBuilder(redisClient, log)
+	cfg := getTestContextEnrichmentConfig()
+	builder := NewContextBuilder(redisClient, log, cfg)
 	ctx := context.Background()
 
 	t.Run("builds context from trigger payload", func(t *testing.T) {
@@ -68,7 +88,8 @@ func TestBuildContext(t *testing.T) {
 func TestBuildContextFromExisting(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	builder := NewContextBuilder(redisClient, log)
+	cfg := getTestContextEnrichmentConfig()
+	builder := NewContextBuilder(redisClient, log, cfg)
 	ctx := context.Background()
 
 	t.Run("reloads context resources", func(t *testing.T) {
@@ -113,7 +134,8 @@ func TestBuildContextFromExisting(t *testing.T) {
 func TestEnrichContext(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	builder := NewContextBuilder(redisClient, log)
+	cfg := getTestContextEnrichmentConfig()
+	builder := NewContextBuilder(redisClient, log, cfg)
 	ctx := context.Background()
 
 	t.Run("adds computed fields", func(t *testing.T) {
@@ -177,7 +199,8 @@ func TestEnrichContext(t *testing.T) {
 func TestBuildCacheKey(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	builder := NewContextBuilder(redisClient, log)
+	cfg := getTestContextEnrichmentConfig()
+	builder := NewContextBuilder(redisClient, log, cfg)
 
 	t.Run("builds key for order.details", func(t *testing.T) {
 		context := map[string]interface{}{

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/google/uuid"
@@ -42,10 +43,11 @@ func NewWorkflowExecutor(
 	workflowRepo WorkflowRepository,
 	log *logger.Logger,
 	m *metrics.Metrics,
+	contextEnrichmentCfg *config.ContextEnrichmentConfig,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		evaluator:      NewEvaluator(),
-		contextBuilder: NewContextBuilder(redis, log),
+		contextBuilder: NewContextBuilder(redis, log, contextEnrichmentCfg),
 		actionExecutor: NewActionExecutor(log),
 		executionRepo:  executionRepo,
 		workflowRepo:   workflowRepo,

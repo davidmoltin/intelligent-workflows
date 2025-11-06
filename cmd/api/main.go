@@ -82,7 +82,7 @@ func run() error {
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
 
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry, &cfg.ContextEnrichment)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service

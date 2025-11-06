@@ -253,6 +253,14 @@ cp .env.example .env
 - `WORKER_TIMEOUT_ENFORCER_INTERVAL` - Timeout enforcer check interval (default: `1m`)
 - `WORKER_SCHEDULER_INTERVAL` - Scheduler check interval (default: `1m`)
 
+#### Context Enrichment
+- `CONTEXT_ENRICHMENT_ENABLED` - Enable context enrichment from microservices (default: `true`)
+- `CONTEXT_ENRICHMENT_BASE_URL` - Base URL for context enrichment services (default: `http://localhost:8081`)
+- `CONTEXT_ENRICHMENT_TIMEOUT` - Request timeout (default: `10s`)
+- `CONTEXT_ENRICHMENT_MAX_RETRIES` - Maximum retry attempts (default: `3`)
+- `CONTEXT_ENRICHMENT_RETRY_DELAY` - Delay between retries with exponential backoff (default: `500ms`)
+- `CONTEXT_ENRICHMENT_CACHE_TTL` - Cache TTL for enriched data (default: `5m`)
+
 #### Logging
 - `LOG_LEVEL` - Log level: `debug`, `info`, `warn`, `error` (default: `info`)
 - `LOG_FORMAT` - Log format: `json` or `text` (default: `json`)
