@@ -234,19 +234,31 @@ kubectl logs -f deployment/intelligent-workflows-api -n intelligent-workflows
 
 See [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) for detailed deployment documentation.
 
-## Monitoring
+## Monitoring and Observability
 
-The system includes built-in monitoring with:
+The system includes comprehensive monitoring and observability:
 
-- **Prometheus** - Metrics collection
-- **Grafana** - Visualization dashboards
-- **Jaeger** - Distributed tracing
+- **Prometheus Metrics** - Application and infrastructure metrics exposed at `/metrics`
+- **Grafana Dashboards** - Pre-configured dashboards for visualization
+- **AlertManager** - Alerting based on metric thresholds
 - **Structured Logging** - JSON-formatted logs with correlation IDs
 
-Access monitoring dashboards:
-- Grafana: http://localhost:3000
-- Prometheus: http://localhost:9090
-- Jaeger: http://localhost:16686
+### Available Metrics
+
+- HTTP requests (count, latency, size)
+- Workflow executions (count, duration, errors, active)
+- Database and Redis connection health
+- Approvals, notifications, and AI requests
+- Background worker performance
+- Authentication activity
+
+### Access Monitoring
+
+- **Metrics Endpoint**: http://localhost:8080/metrics
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9091
+
+See [docs/METRICS.md](./docs/METRICS.md) for complete metrics documentation and example queries.
 
 ## Security
 
@@ -284,6 +296,7 @@ Please ensure:
 - [Getting Started](./GETTING_STARTED.md) - Setup and basic usage
 - [Architecture](./ARCHITECTURE.md) - System design and components
 - [API Documentation](./docs/api/README.md) - Complete API reference
+- [Metrics and Monitoring](./docs/METRICS.md) - Prometheus metrics and observability
 - [Testing Guide](./TESTING.md) - Testing strategy and guidelines
 - [Infrastructure](./INFRASTRUCTURE.md) - Deployment and operations
 - [Implementation Roadmap](./IMPLEMENTATION_ROADMAP.md) - Development timeline
