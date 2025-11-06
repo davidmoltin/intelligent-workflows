@@ -54,8 +54,8 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		req.Source = "api"
 	}
 
-	// Route event to workflows (EventRouter will be updated in Phase 3 to handle organizationID)
-	event, err := h.eventRouter.RouteEvent(r.Context(), req.EventType, req.Source, req.Payload)
+	// Route event to workflows with organization context
+	event, err := h.eventRouter.RouteEvent(r.Context(), organizationID, req.EventType, req.Source, req.Payload)
 	if err != nil {
 		h.logger.Errorf("Failed to route event: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to process event")
