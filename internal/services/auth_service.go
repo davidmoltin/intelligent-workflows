@@ -18,6 +18,7 @@ type AuthService struct {
 	userRepo         *postgres.UserRepository
 	apiKeyRepo       *postgres.APIKeyRepository
 	refreshTokenRepo *postgres.RefreshTokenRepository
+	orgRepo          *postgres.OrganizationRepository
 	jwtManager       *auth.JWTManager
 	logger           *logger.Logger
 }
@@ -27,6 +28,7 @@ func NewAuthService(
 	userRepo *postgres.UserRepository,
 	apiKeyRepo *postgres.APIKeyRepository,
 	refreshTokenRepo *postgres.RefreshTokenRepository,
+	orgRepo *postgres.OrganizationRepository,
 	jwtManager *auth.JWTManager,
 	log *logger.Logger,
 ) *AuthService {
@@ -34,6 +36,7 @@ func NewAuthService(
 		userRepo:         userRepo,
 		apiKeyRepo:       apiKeyRepo,
 		refreshTokenRepo: refreshTokenRepo,
+		orgRepo:          orgRepo,
 		jwtManager:       jwtManager,
 		logger:           log,
 	}
@@ -97,6 +100,20 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
+	// Get user's organizations
+	orgs, err := s.orgRepo.GetUserOrganizations(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user organizations: %w", err)
+	}
+
+	// Ensure user belongs to at least one organization
+	if len(orgs) == 0 {
+		return nil, fmt.Errorf("user does not belong to any organization")
+	}
+
+	// Use the first organization as default (in future, we can add user preference for default org)
+	organizationID := orgs[0].ID
+
 	// Get user roles and permissions
 	roles, err := s.userRepo.GetUserRoles(ctx, user.ID)
 	if err != nil {
@@ -108,9 +125,10 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, fmt.Errorf("failed to get user permissions: %w", err)
 	}
 
-	// Generate access token
+	// Generate access token with organization ID
 	accessToken, err := s.jwtManager.GenerateAccessToken(
 		user.ID,
+		organizationID,
 		user.Username,
 		user.Email,
 		roles,
@@ -188,6 +206,20 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, fmt.Errorf("user account is disabled")
 	}
 
+	// Get user's organizations
+	orgs, err := s.orgRepo.GetUserOrganizations(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user organizations: %w", err)
+	}
+
+	// Ensure user belongs to at least one organization
+	if len(orgs) == 0 {
+		return nil, fmt.Errorf("user does not belong to any organization")
+	}
+
+	// Use the first organization as default
+	organizationID := orgs[0].ID
+
 	// Get user roles and permissions
 	roles, err := s.userRepo.GetUserRoles(ctx, user.ID)
 	if err != nil {
@@ -199,9 +231,10 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, fmt.Errorf("failed to get user permissions: %w", err)
 	}
 
-	// Generate new access token
+	// Generate new access token with organization ID
 	accessToken, err := s.jwtManager.GenerateAccessToken(
 		user.ID,
+		organizationID,
 		user.Username,
 		user.Email,
 		roles,
