@@ -186,6 +186,16 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Schedule.DeleteSchedule)
 				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}/next-runs", r.handlers.Schedule.GetNextRuns)
 			})
+
+			// Audit logs (only if audit handler is configured)
+			if r.handlers.Audit != nil {
+				router.Route("/audit-logs", func(router chi.Router) {
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/", r.handlers.Audit.ListAuditLogs)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/{id}", r.handlers.Audit.GetAuditLog)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/entity/{entity_type}/{entity_id}", r.handlers.Audit.GetEntityAuditLogs)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/actor/{actor_id}", r.handlers.Audit.GetActorAuditLogs)
+				})
+			}
 		})
 
 		// AI endpoints (only if AI service is configured)

@@ -31,6 +31,7 @@ type ApprovalService struct {
 	logger               *logger.Logger
 	notificationSvc      *NotificationService
 	workflowResumer      WorkflowResumer
+	auditService         *AuditService
 	defaultApproverEmail string
 }
 
@@ -40,6 +41,7 @@ func NewApprovalService(
 	log *logger.Logger,
 	notificationSvc *NotificationService,
 	workflowResumer WorkflowResumer,
+	auditService *AuditService,
 	defaultApproverEmail string,
 ) *ApprovalService {
 	return &ApprovalService{
@@ -47,6 +49,7 @@ func NewApprovalService(
 		logger:               log,
 		notificationSvc:      notificationSvc,
 		workflowResumer:      workflowResumer,
+		auditService:         auditService,
 		defaultApproverEmail: defaultApproverEmail,
 	}
 }
@@ -140,6 +143,13 @@ func (s *ApprovalService) ApproveRequest(
 
 	s.logger.Infof("Approval request approved: %s", approval.RequestID)
 
+	// Log audit event
+	if s.auditService != nil {
+		if err := s.auditService.LogApprovalApproved(ctx, approval.ID, approverID, reason); err != nil {
+			s.logger.Errorf("Failed to log audit event for approval: %v", err)
+		}
+	}
+
 	// Resume workflow execution
 	if s.workflowResumer != nil {
 		if err := s.workflowResumer.ResumeWorkflow(ctx, approval.ExecutionID, true); err != nil {
@@ -196,6 +206,13 @@ func (s *ApprovalService) RejectRequest(
 	}
 
 	s.logger.Infof("Approval request rejected: %s", approval.RequestID)
+
+	// Log audit event
+	if s.auditService != nil {
+		if err := s.auditService.LogApprovalRejected(ctx, approval.ID, approverID, reason); err != nil {
+			s.logger.Errorf("Failed to log audit event for rejection: %v", err)
+		}
+	}
 
 	// Resume workflow execution with rejection status
 	if s.workflowResumer != nil {
