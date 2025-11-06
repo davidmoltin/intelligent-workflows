@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -27,6 +28,13 @@ func NewAnalyticsHandler(log *logger.Logger, analyticsRepo *postgres.AnalyticsRe
 
 // GetDashboard handles GET /api/v1/analytics/dashboard
 func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 	timeRange := r.URL.Query().Get("time_range")
@@ -46,7 +54,7 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get execution stats
-	stats, err := h.analyticsRepo.GetExecutionStats(r.Context(), workflowID, timeRange)
+	stats, err := h.analyticsRepo.GetExecutionStats(r.Context(), organizationID, workflowID, timeRange)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution stats: %v", err)
 		http.Error(w, "Failed to retrieve execution stats", http.StatusInternalServerError)
@@ -54,7 +62,7 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get execution trends
-	trends, err := h.analyticsRepo.GetExecutionTrends(r.Context(), workflowID, timeRange, "")
+	trends, err := h.analyticsRepo.GetExecutionTrends(r.Context(), organizationID, workflowID, timeRange, "")
 	if err != nil {
 		h.logger.Errorf("Failed to get execution trends: %v", err)
 		http.Error(w, "Failed to retrieve execution trends", http.StatusInternalServerError)
@@ -64,7 +72,7 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 	// Get workflow stats (only if not filtering by specific workflow)
 	var workflowStats []models.WorkflowStats
 	if workflowID == nil {
-		workflowStats, err = h.analyticsRepo.GetWorkflowStats(r.Context(), timeRange, 10)
+		workflowStats, err = h.analyticsRepo.GetWorkflowStats(r.Context(), organizationID, timeRange, 10)
 		if err != nil {
 			h.logger.Errorf("Failed to get workflow stats: %v", err)
 			// Don't fail the entire request for this
@@ -73,7 +81,7 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get recent errors
-	recentErrors, err := h.analyticsRepo.GetRecentErrors(r.Context(), workflowID, 10)
+	recentErrors, err := h.analyticsRepo.GetRecentErrors(r.Context(), organizationID, workflowID, 10)
 	if err != nil {
 		h.logger.Errorf("Failed to get recent errors: %v", err)
 		// Don't fail the entire request for this
@@ -83,7 +91,7 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 	// Get step stats if filtering by workflow
 	var stepStats []models.StepStats
 	if workflowID != nil {
-		stepStats, err = h.analyticsRepo.GetStepStats(r.Context(), workflowID, timeRange)
+		stepStats, err = h.analyticsRepo.GetStepStats(r.Context(), organizationID, workflowID, timeRange)
 		if err != nil {
 			h.logger.Errorf("Failed to get step stats: %v", err)
 			// Don't fail the entire request for this
@@ -107,6 +115,13 @@ func (h *AnalyticsHandler) GetDashboard(w http.ResponseWriter, r *http.Request) 
 
 // GetExecutionStats handles GET /api/v1/analytics/stats
 func (h *AnalyticsHandler) GetExecutionStats(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 	timeRange := r.URL.Query().Get("time_range")
@@ -125,7 +140,7 @@ func (h *AnalyticsHandler) GetExecutionStats(w http.ResponseWriter, r *http.Requ
 		workflowID = &id
 	}
 
-	stats, err := h.analyticsRepo.GetExecutionStats(r.Context(), workflowID, timeRange)
+	stats, err := h.analyticsRepo.GetExecutionStats(r.Context(), organizationID, workflowID, timeRange)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution stats: %v", err)
 		http.Error(w, "Failed to retrieve execution stats", http.StatusInternalServerError)
@@ -138,6 +153,13 @@ func (h *AnalyticsHandler) GetExecutionStats(w http.ResponseWriter, r *http.Requ
 
 // GetExecutionTrends handles GET /api/v1/analytics/trends
 func (h *AnalyticsHandler) GetExecutionTrends(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 	timeRange := r.URL.Query().Get("time_range")
@@ -157,7 +179,7 @@ func (h *AnalyticsHandler) GetExecutionTrends(w http.ResponseWriter, r *http.Req
 		workflowID = &id
 	}
 
-	trends, err := h.analyticsRepo.GetExecutionTrends(r.Context(), workflowID, timeRange, interval)
+	trends, err := h.analyticsRepo.GetExecutionTrends(r.Context(), organizationID, workflowID, timeRange, interval)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution trends: %v", err)
 		http.Error(w, "Failed to retrieve execution trends", http.StatusInternalServerError)
@@ -170,13 +192,20 @@ func (h *AnalyticsHandler) GetExecutionTrends(w http.ResponseWriter, r *http.Req
 
 // GetWorkflowStats handles GET /api/v1/analytics/workflows
 func (h *AnalyticsHandler) GetWorkflowStats(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	timeRange := r.URL.Query().Get("time_range")
 	if timeRange == "" {
 		timeRange = "24h"
 	}
 
-	stats, err := h.analyticsRepo.GetWorkflowStats(r.Context(), timeRange, 20)
+	stats, err := h.analyticsRepo.GetWorkflowStats(r.Context(), organizationID, timeRange, 20)
 	if err != nil {
 		h.logger.Errorf("Failed to get workflow stats: %v", err)
 		http.Error(w, "Failed to retrieve workflow stats", http.StatusInternalServerError)
@@ -189,6 +218,13 @@ func (h *AnalyticsHandler) GetWorkflowStats(w http.ResponseWriter, r *http.Reque
 
 // GetRecentErrors handles GET /api/v1/analytics/errors
 func (h *AnalyticsHandler) GetRecentErrors(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 
@@ -203,7 +239,7 @@ func (h *AnalyticsHandler) GetRecentErrors(w http.ResponseWriter, r *http.Reques
 		workflowID = &id
 	}
 
-	errors, err := h.analyticsRepo.GetRecentErrors(r.Context(), workflowID, 20)
+	errors, err := h.analyticsRepo.GetRecentErrors(r.Context(), organizationID, workflowID, 20)
 	if err != nil {
 		h.logger.Errorf("Failed to get recent errors: %v", err)
 		http.Error(w, "Failed to retrieve recent errors", http.StatusInternalServerError)
@@ -216,6 +252,13 @@ func (h *AnalyticsHandler) GetRecentErrors(w http.ResponseWriter, r *http.Reques
 
 // GetStepStats handles GET /api/v1/analytics/steps
 func (h *AnalyticsHandler) GetStepStats(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 	timeRange := r.URL.Query().Get("time_range")
@@ -234,7 +277,7 @@ func (h *AnalyticsHandler) GetStepStats(w http.ResponseWriter, r *http.Request) 
 		workflowID = &id
 	}
 
-	stats, err := h.analyticsRepo.GetStepStats(r.Context(), workflowID, timeRange)
+	stats, err := h.analyticsRepo.GetStepStats(r.Context(), organizationID, workflowID, timeRange)
 	if err != nil {
 		h.logger.Errorf("Failed to get step stats: %v", err)
 		http.Error(w, "Failed to retrieve step stats", http.StatusInternalServerError)
