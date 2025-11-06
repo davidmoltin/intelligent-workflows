@@ -23,6 +23,7 @@ type Handlers struct {
 	AI        *AIHandler
 	Analytics *AnalyticsHandler
 	Schedule  *ScheduleHandler
+	Audit     *AuditHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -43,6 +44,7 @@ func NewHandlers(
 	scheduleService ScheduleService,
 	workflowResumer *services.WorkflowResumerImpl,
 	aiService *services.AIService,
+	auditService *services.AuditService,
 	healthCheckers *HealthCheckers,
 	version string,
 ) *Handlers {
@@ -52,9 +54,15 @@ func NewHandlers(
 		aiHandler = NewAIHandler(aiService, log.Logger)
 	}
 
+	// Handle Audit handler initialization
+	var auditHandler *AuditHandler
+	if auditService != nil {
+		auditHandler = NewAuditHandler(log, auditService)
+	}
+
 	return &Handlers{
 		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis, version),
-		Workflow:  NewWorkflowHandler(log, workflowRepo),
+		Workflow:  NewWorkflowHandler(log, workflowRepo, auditService),
 		Event:     NewEventHandler(log, eventRouter),
 		Execution: NewExecutionHandler(log, executionRepo, workflowResumer),
 		Approval:  NewApprovalHandler(log, approvalService),
@@ -63,6 +71,7 @@ func NewHandlers(
 		AI:        aiHandler,
 		Analytics: NewAnalyticsHandler(log, analyticsRepo),
 		Schedule:  NewScheduleHandler(log, scheduleService),
+		Audit:     auditHandler,
 	}
 }
 
