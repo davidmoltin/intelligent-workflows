@@ -56,9 +56,10 @@ type LoggerConfig struct {
 
 // AppConfig holds application-specific configuration
 type AppConfig struct {
-	Environment string
-	Version     string
-	Name        string
+	Environment          string
+	Version              string
+	Name                 string
+	DefaultApproverEmail string
 }
 
 // NotificationConfig holds notification service configuration
@@ -127,9 +128,10 @@ func Load() (*Config, error) {
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
 		App: AppConfig{
-			Environment: getEnv("APP_ENV", "development"),
-			Version:     getEnv("APP_VERSION", "0.1.0"),
-			Name:        getEnv("APP_NAME", "intelligent-workflows"),
+			Environment:          getEnv("APP_ENV", "development"),
+			Version:              getEnv("APP_VERSION", "0.1.0"),
+			Name:                 getEnv("APP_NAME", "intelligent-workflows"),
+			DefaultApproverEmail: getEnv("DEFAULT_APPROVER_EMAIL", "approver@example.com"),
 		},
 		Notification: NotificationConfig{
 			BaseURL: getEnv("NOTIFICATION_BASE_URL", "http://localhost:8080"),

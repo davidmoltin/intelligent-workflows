@@ -42,6 +42,7 @@ func NewHandlers(
 	workflowResumer *services.WorkflowResumerImpl,
 	aiService *services.AIService,
 	healthCheckers *HealthCheckers,
+	version string,
 ) *Handlers {
 	// Handle AI handler initialization
 	var aiHandler *AIHandler
@@ -50,7 +51,7 @@ func NewHandlers(
 	}
 
 	return &Handlers{
-		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis),
+		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis, version),
 		Workflow:  NewWorkflowHandler(log, workflowRepo),
 		Event:     NewEventHandler(log, eventRouter),
 		Execution: NewExecutionHandler(log, executionRepo, workflowResumer),

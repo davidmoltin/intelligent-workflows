@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
@@ -92,13 +93,10 @@ func (er *EventRouter) RouteEvent(
 	for _, workflow := range workflows {
 		er.logger.Infof("Triggering workflow: %s (ID: %s)", workflow.Name, workflow.ID)
 
-		// Execute workflow asynchronously
+		// Execute workflow asynchronously with panic recovery
 		go func(wf models.Workflow) {
 			execCtx := context.Background()
-			_, err := er.executor.Execute(execCtx, &wf, eventType, payload)
-			if err != nil {
-				er.logger.Errorf("Workflow execution failed: %s - %v", wf.Name, err)
-			}
+			er.safeExecuteWorkflow(execCtx, &wf, eventType, payload)
 		}(workflow)
 
 		triggeredWorkflows = append(triggeredWorkflows, workflow.WorkflowID)
@@ -114,6 +112,59 @@ func (er *EventRouter) RouteEvent(
 	}
 
 	return event, nil
+}
+
+// safeExecuteWorkflow executes a workflow with panic recovery
+func (er *EventRouter) safeExecuteWorkflow(
+	ctx context.Context,
+	workflow *models.Workflow,
+	eventType string,
+	payload map[string]interface{},
+) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			stack := string(debug.Stack())
+			er.logger.Errorf(
+				"PANIC in workflow execution goroutine - workflow_id: %s, workflow_name: %s, event_type: %s, panic: %v, stack: %s",
+				workflow.ID,
+				workflow.Name,
+				eventType,
+				rec,
+				stack,
+			)
+
+			// Create a failed execution record to track the panic
+			now := time.Now()
+			errorMsg := fmt.Sprintf("panic during execution: %v", rec)
+			execution := &models.WorkflowExecution{
+				ID:           uuid.New(),
+				ExecutionID:  fmt.Sprintf("exec_panic_%s", uuid.New().String()[:8]),
+				WorkflowID:   workflow.ID,
+				TriggerEvent: eventType,
+				Status:       models.ExecutionStatusFailed,
+				StartedAt:    now,
+				CompletedAt:  &now,
+				ErrorMessage: &errorMsg,
+				Metadata: models.JSONB{
+					"panic_recovered": true,
+					"stack_trace":     stack,
+				},
+			}
+
+			// Attempt to record the panic execution (best effort)
+			if er.executor.executionRepo != nil {
+				if err := er.executor.executionRepo.CreateExecution(ctx, execution); err != nil {
+					er.logger.Errorf("Failed to record panic execution: %v", err)
+				}
+			}
+		}
+	}()
+
+	// Execute the workflow
+	_, err := er.executor.Execute(ctx, workflow, eventType, payload)
+	if err != nil {
+		er.logger.Errorf("Workflow execution failed: %s - %v", workflow.Name, err)
+	}
 }
 
 // findMatchingWorkflows finds workflows that match the event type

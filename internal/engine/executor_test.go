@@ -431,3 +431,317 @@ func TestExecuteConditionStep(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// TestExecuteWorkflow_Timeout tests that workflows timeout correctly
+func TestExecuteWorkflow_Timeout(t *testing.T) {
+	log := logger.NewForTesting()
+	ctx := context.Background()
+
+	t.Run("workflow times out after default timeout", func(t *testing.T) {
+		executionCreated := false
+		executionCompleted := false
+
+		repo := &mockExecutionRepo{
+			createExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				executionCreated = true
+				// Verify timeout is stored in metadata
+				if _, ok := execution.Metadata["timeout_seconds"]; !ok {
+					t.Error("Expected timeout_seconds in metadata")
+				}
+				// Note: timeout will be 1ns = 0.000000001 seconds
+				return nil
+			},
+			updateExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				executionCompleted = true
+				// Verify it was marked as failed due to timeout
+				if execution.Status != models.ExecutionStatusFailed {
+					t.Errorf("Expected status failed, got %s", execution.Status)
+				}
+				if execution.ErrorMessage == nil || !contains(*execution.ErrorMessage, "timed out") {
+					t.Error("Expected error message to contain 'timed out'")
+				}
+				return nil
+			},
+		}
+
+		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+
+		// Create a workflow with a single step
+		workflow := &models.Workflow{
+			ID:   uuid.New(),
+			Name: "timeout-workflow",
+			Definition: models.WorkflowDefinition{
+				Trigger: models.TriggerDefinition{
+					Type: "event",
+				},
+				Steps: []models.Step{
+					{
+						ID:   "step1",
+						Type: "action",
+						Action: &models.Action{
+							Type: "allow",
+						},
+					},
+				},
+			},
+		}
+
+		// Set an impossibly short timeout to guarantee timeout
+		executor.defaultTimeout = 1 * time.Nanosecond
+
+		execution, err := executor.Execute(ctx, workflow, "test.event", map[string]interface{}{})
+
+		if !executionCreated {
+			t.Error("Expected execution to be created")
+		}
+
+		// Should timeout
+		if err == nil {
+			t.Error("Expected timeout error")
+		}
+
+		if execution == nil {
+			t.Fatal("Expected execution to be returned")
+		}
+
+		// Give a moment for update to complete
+		time.Sleep(50 * time.Millisecond)
+
+		if !executionCompleted {
+			t.Error("Expected execution to be marked as completed")
+		}
+	})
+
+	t.Run("workflow completes before timeout", func(t *testing.T) {
+		executionCreated := false
+		executionCompleted := false
+
+		repo := &mockExecutionRepo{
+			createExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				executionCreated = true
+				return nil
+			},
+			updateExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				executionCompleted = true
+				// Should complete successfully
+				if execution.Status != models.ExecutionStatusCompleted {
+					t.Errorf("Expected status completed, got %s", execution.Status)
+				}
+				return nil
+			},
+		}
+
+		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+
+		workflow := &models.Workflow{
+			ID:   uuid.New(),
+			Name: "fast-workflow",
+			Definition: models.WorkflowDefinition{
+				Trigger: models.TriggerDefinition{
+					Type: "event",
+				},
+				Steps: []models.Step{
+					{
+						ID:   "step1",
+						Type: "action",
+						Action: &models.Action{
+							Type: "allow",
+						},
+					},
+				},
+			},
+		}
+
+		// Generous timeout
+		executor.defaultTimeout = 5 * time.Second
+
+		execution, err := executor.Execute(ctx, workflow, "test.event", map[string]interface{}{})
+
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if !executionCreated {
+			t.Error("Expected execution to be created")
+		}
+
+		if !executionCompleted {
+			t.Error("Expected execution to be completed")
+		}
+
+		if execution == nil {
+			t.Fatal("Expected execution to be returned")
+		}
+
+		if execution.Status != models.ExecutionStatusCompleted {
+			t.Errorf("Expected status completed, got %s", execution.Status)
+		}
+	})
+
+	t.Run("workflow with custom timeout", func(t *testing.T) {
+		customTimeout := 60.0 // seconds
+
+		repo := &mockExecutionRepo{
+			createExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				// Verify custom timeout is used
+				if timeoutVal, ok := execution.Metadata["timeout_seconds"]; !ok {
+					t.Error("Expected timeout_seconds in metadata")
+				} else {
+					if timeout, ok := timeoutVal.(float64); ok {
+						if timeout != customTimeout {
+							t.Errorf("Expected timeout %v, got %v", customTimeout, timeout)
+						}
+					}
+				}
+				return nil
+			},
+			updateExecutionFunc: func(ctx context.Context, execution *models.WorkflowExecution) error {
+				return nil
+			},
+		}
+
+		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log)
+
+		workflow := &models.Workflow{
+			ID:   uuid.New(),
+			Name: "custom-timeout-workflow",
+			Definition: models.WorkflowDefinition{
+				Trigger: models.TriggerDefinition{
+					Type: "event",
+					Data: map[string]interface{}{
+						"timeout_seconds": customTimeout,
+					},
+				},
+				Steps: []models.Step{
+					{
+						ID:   "step1",
+						Type: "action",
+						Action: &models.Action{
+							Type: "allow",
+						},
+					},
+				},
+			},
+		}
+
+		// Default timeout is shorter
+		executor.defaultTimeout = 5 * time.Second
+
+		execution, err := executor.Execute(ctx, workflow, "test.event", map[string]interface{}{})
+
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		if execution == nil {
+			t.Fatal("Expected execution to be returned")
+		}
+	})
+}
+
+// TestGetWorkflowTimeout tests the timeout extraction logic
+func TestGetWorkflowTimeout(t *testing.T) {
+	log := logger.NewForTesting()
+	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	executor := NewWorkflowExecutor(redisClient, &mockExecutionRepo{}, nil, log)
+
+	tests := []struct {
+		name     string
+		workflow *models.Workflow
+		expected time.Duration
+	}{
+		{
+			name: "uses default timeout when no custom timeout set",
+			workflow: &models.Workflow{
+				Definition: models.WorkflowDefinition{
+					Trigger: models.TriggerDefinition{
+						Type: "event",
+					},
+				},
+			},
+			expected: 30 * time.Second, // default
+		},
+		{
+			name: "uses custom timeout from trigger data (float64)",
+			workflow: &models.Workflow{
+				Definition: models.WorkflowDefinition{
+					Trigger: models.TriggerDefinition{
+						Type: "event",
+						Data: map[string]interface{}{
+							"timeout_seconds": 120.0,
+						},
+					},
+				},
+			},
+			expected: 120 * time.Second,
+		},
+		{
+			name: "uses custom timeout from trigger data (int)",
+			workflow: &models.Workflow{
+				Definition: models.WorkflowDefinition{
+					Trigger: models.TriggerDefinition{
+						Type: "event",
+						Data: map[string]interface{}{
+							"timeout_seconds": 90,
+						},
+					},
+				},
+			},
+			expected: 90 * time.Second,
+		},
+		{
+			name: "ignores invalid timeout (zero)",
+			workflow: &models.Workflow{
+				Definition: models.WorkflowDefinition{
+					Trigger: models.TriggerDefinition{
+						Type: "event",
+						Data: map[string]interface{}{
+							"timeout_seconds": 0,
+						},
+					},
+				},
+			},
+			expected: 30 * time.Second, // falls back to default
+		},
+		{
+			name: "ignores invalid timeout (negative)",
+			workflow: &models.Workflow{
+				Definition: models.WorkflowDefinition{
+					Trigger: models.TriggerDefinition{
+						Type: "event",
+						Data: map[string]interface{}{
+							"timeout_seconds": -10.0,
+						},
+					},
+				},
+			},
+			expected: 30 * time.Second, // falls back to default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			timeout := executor.getWorkflowTimeout(tt.workflow)
+			if timeout != tt.expected {
+				t.Errorf("Expected timeout %v, got %v", tt.expected, timeout)
+			}
+		})
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

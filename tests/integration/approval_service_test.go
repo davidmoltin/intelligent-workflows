@@ -45,7 +45,7 @@ func TestApprovalService_CreateApprovalRequest(t *testing.T) {
 
 	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer, "test-approver@example.com")
 
 	ctx := context.Background()
 	executionID := uuid.New()
@@ -102,7 +102,7 @@ func TestApprovalService_ApproveRequest(t *testing.T) {
 
 	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer, "test-approver@example.com")
 
 	ctx := context.Background()
 
@@ -165,7 +165,7 @@ func TestApprovalService_RejectRequest(t *testing.T) {
 
 	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer, "test-approver@example.com")
 
 	ctx := context.Background()
 
@@ -228,7 +228,7 @@ func TestApprovalService_ExpireOldApprovals(t *testing.T) {
 
 	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer, "test-approver@example.com")
 
 	ctx := context.Background()
 
@@ -288,7 +288,7 @@ func TestApprovalService_ListPendingApprovals(t *testing.T) {
 
 	workflowResumer := services.NewWorkflowResumer(log, nil, nil)
 
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationSvc, workflowResumer, "test-approver@example.com")
 
 	ctx := context.Background()
 

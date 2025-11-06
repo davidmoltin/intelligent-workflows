@@ -61,9 +61,11 @@ func (we *WorkflowExecutor) Execute(
 ) (*models.WorkflowExecution, error) {
 	we.logger.Infof("Starting workflow execution: %s (ID: %s)", workflow.Name, workflow.ID)
 
+	// Get timeout for this workflow (check Definition.Timeout first, then trigger data, then default)
+	timeout := we.getWorkflowTimeout(workflow)
+
 	// Apply workflow-level timeout
 	var cancel context.CancelFunc
-	timeout := we.parseTimeout(workflow.Definition.Timeout, we.defaultTimeout)
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -88,6 +90,8 @@ func (we *WorkflowExecutor) Execute(
 		execution.TimeoutAt = &timeoutAt
 		timeoutSecs := int(timeout.Seconds())
 		execution.TimeoutDuration = &timeoutSecs
+		// Also store in metadata for observability
+		execution.Metadata["timeout_seconds"] = timeout.Seconds()
 	}
 
 	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
@@ -164,6 +168,17 @@ func (we *WorkflowExecutor) executeSteps(
 
 	// Execute steps
 	for currentStepID != "" {
+		// Check for context cancellation (timeout or manual cancellation)
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				return models.ExecutionResultFailed, fmt.Errorf("workflow execution timed out")
+			}
+			return models.ExecutionResultFailed, ctx.Err()
+		default:
+			// Continue execution
+		}
+
 		step, exists := stepMap[currentStepID]
 		if !exists {
 			return models.ExecutionResultFailed, fmt.Errorf("step not found: %s", currentStepID)
@@ -868,4 +883,33 @@ func (we *WorkflowExecutor) continueFromStep(
 	}
 
 	return finalResult, nil
+}
+
+// getWorkflowTimeout returns the timeout duration for a workflow
+// It checks (1) workflow Definition.Timeout, (2) trigger data timeout_seconds, or (3) default
+func (we *WorkflowExecutor) getWorkflowTimeout(workflow *models.Workflow) time.Duration {
+	// First, check if workflow has timeout defined in Definition.Timeout
+	if workflow.Definition.Timeout != "" {
+		timeout := we.parseTimeout(workflow.Definition.Timeout, 0)
+		if timeout > 0 {
+			return timeout
+		}
+	}
+
+	// Second, check if workflow has custom timeout in trigger metadata
+	if workflow.Definition.Trigger.Data != nil {
+		if timeoutVal, ok := workflow.Definition.Trigger.Data["timeout_seconds"]; ok {
+			// Try to convert to float64 (JSON numbers are float64)
+			if timeoutSeconds, ok := timeoutVal.(float64); ok && timeoutSeconds > 0 {
+				return time.Duration(timeoutSeconds) * time.Second
+			}
+			// Try to convert to int
+			if timeoutSeconds, ok := timeoutVal.(int); ok && timeoutSeconds > 0 {
+				return time.Duration(timeoutSeconds) * time.Second
+			}
+		}
+	}
+
+	// Return default timeout
+	return we.defaultTimeout
 }

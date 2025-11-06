@@ -40,13 +40,14 @@ func NewApprovalService(
 	log *logger.Logger,
 	notificationSvc *NotificationService,
 	workflowResumer WorkflowResumer,
+	defaultApproverEmail string,
 ) *ApprovalService {
 	return &ApprovalService{
 		approvalRepo:         approvalRepo,
 		logger:               log,
 		notificationSvc:      notificationSvc,
 		workflowResumer:      workflowResumer,
-		defaultApproverEmail: "approver@example.com", // TODO: Make this configurable
+		defaultApproverEmail: defaultApproverEmail,
 	}
 }
 
