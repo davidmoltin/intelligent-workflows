@@ -25,8 +25,8 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, execution *mo
 		INSERT INTO workflow_executions (
 			id, workflow_id, execution_id, trigger_event, trigger_payload,
 			context, status, result, started_at, completed_at, duration_ms,
-			error_message, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			error_message, metadata, timeout_at, timeout_duration
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, started_at`
 
 	err := r.db.QueryRowContext(
@@ -35,7 +35,7 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, execution *mo
 		execution.TriggerEvent, execution.TriggerPayload, execution.Context,
 		execution.Status, execution.Result, execution.StartedAt,
 		execution.CompletedAt, execution.DurationMs, execution.ErrorMessage,
-		execution.Metadata,
+		execution.Metadata, execution.TimeoutAt, execution.TimeoutDuration,
 	).Scan(&execution.ID, &execution.StartedAt)
 
 	if err != nil {
@@ -354,6 +354,56 @@ func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, limit int
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating paused executions: %w", err)
+	}
+
+	return executions, nil
+}
+
+// GetTimedOutExecutions retrieves executions that have exceeded their timeout
+func (r *ExecutionRepository) GetTimedOutExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
+	query := `
+		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		       context, status, result, started_at, completed_at, duration_ms,
+		       error_message, metadata, paused_at, paused_reason, paused_step_id,
+		       next_step_id, resume_data, resume_count, last_resumed_at,
+		       timeout_at, timeout_duration
+		FROM workflow_executions
+		WHERE timeout_at IS NOT NULL
+		  AND timeout_at < NOW()
+		  AND status IN ($1, $2)
+		ORDER BY timeout_at ASC
+		LIMIT $3`
+
+	rows, err := r.db.QueryContext(ctx, query,
+		models.ExecutionStatusRunning,
+		models.ExecutionStatusWaiting,
+		limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get timed-out executions: %w", err)
+	}
+	defer rows.Close()
+
+	var executions []*models.WorkflowExecution
+	for rows.Next() {
+		execution := &models.WorkflowExecution{}
+		err := rows.Scan(
+			&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+			&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
+			&execution.Status, &execution.Result, &execution.StartedAt,
+			&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
+			&execution.Metadata, &execution.PausedAt, &execution.PausedReason,
+			&execution.PausedStepID, &execution.NextStepID, &execution.ResumeData,
+			&execution.ResumeCount, &execution.LastResumedAt,
+			&execution.TimeoutAt, &execution.TimeoutDuration,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan timed-out execution: %w", err)
+		}
+		executions = append(executions, execution)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating timed-out executions: %w", err)
 	}
 
 	return executions, nil

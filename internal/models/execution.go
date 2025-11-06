@@ -50,6 +50,10 @@ type WorkflowExecution struct {
 	ErrorMessage   *string          `json:"error_message,omitempty" db:"error_message"`
 	Metadata       JSONB            `json:"metadata,omitempty" db:"metadata"`
 
+	// Timeout enforcement fields
+	TimeoutAt      *time.Time  `json:"timeout_at,omitempty" db:"timeout_at"`
+	TimeoutDuration *int       `json:"timeout_duration,omitempty" db:"timeout_duration"` // in seconds
+
 	// Workflow resumer fields
 	PausedAt       *time.Time  `json:"paused_at,omitempty" db:"paused_at"`
 	PausedReason   *string     `json:"paused_reason,omitempty" db:"paused_reason"`

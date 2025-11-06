@@ -158,6 +158,10 @@ func run() error {
 	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, 1*time.Minute)
 	resumerWorker.Start(workerCtx)
 
+	// Initialize and start timeout enforcer worker
+	timeoutEnforcerWorker := workers.NewTimeoutEnforcerWorker(executionRepo, log, 1*time.Minute)
+	timeoutEnforcerWorker.Start(workerCtx)
+
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
