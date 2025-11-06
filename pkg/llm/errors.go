@@ -59,15 +59,15 @@ type Error struct {
 type ErrorType string
 
 const (
-	ErrorTypeInvalidRequest       ErrorType = "invalid_request"
-	ErrorTypeAuthentication       ErrorType = "authentication"
-	ErrorTypeRateLimit            ErrorType = "rate_limit"
-	ErrorTypeQuota                ErrorType = "quota_exceeded"
-	ErrorTypeModelNotFound        ErrorType = "model_not_found"
+	ErrorTypeInvalidRequest        ErrorType = "invalid_request"
+	ErrorTypeAuthentication        ErrorType = "authentication"
+	ErrorTypeRateLimit             ErrorType = "rate_limit"
+	ErrorTypeQuota                 ErrorType = "quota_exceeded"
+	ErrorTypeModelNotFound         ErrorType = "model_not_found"
 	ErrorTypeContextLengthExceeded ErrorType = "context_length_exceeded"
-	ErrorTypeTimeout              ErrorType = "timeout"
-	ErrorTypeServiceUnavailable   ErrorType = "service_unavailable"
-	ErrorTypeUnknown              ErrorType = "unknown"
+	ErrorTypeTimeout               ErrorType = "timeout"
+	ErrorTypeServiceUnavailable    ErrorType = "service_unavailable"
+	ErrorTypeUnknown               ErrorType = "unknown"
 )
 
 // Error implements the error interface

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // ApprovalHandler handles approval-related HTTP requests

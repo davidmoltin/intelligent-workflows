@@ -30,10 +30,10 @@ func TestError_Unwrap(t *testing.T) {
 
 func TestError_Is(t *testing.T) {
 	tests := []struct {
-		name      string
-		errType   ErrorType
-		target    error
-		shouldBe  bool
+		name     string
+		errType  ErrorType
+		target   error
+		shouldBe bool
 	}{
 		{
 			name:     "invalid request",
@@ -101,9 +101,9 @@ func TestError_Is(t *testing.T) {
 
 func TestIsRetryable(t *testing.T) {
 	tests := []struct {
-		name       string
-		err        error
-		retryable  bool
+		name      string
+		err       error
+		retryable bool
 	}{
 		{
 			name:      "rate limit is retryable",

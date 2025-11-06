@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 )
 
 // ActionResult represents the result of an action execution

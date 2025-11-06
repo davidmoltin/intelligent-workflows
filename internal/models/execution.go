@@ -51,25 +51,25 @@ type WorkflowExecution struct {
 	Metadata       JSONB            `json:"metadata,omitempty" db:"metadata"`
 
 	// Timeout enforcement fields
-	TimeoutAt      *time.Time  `json:"timeout_at,omitempty" db:"timeout_at"`
+	TimeoutAt       *time.Time `json:"timeout_at,omitempty" db:"timeout_at"`
 	TimeoutDuration *int       `json:"timeout_duration,omitempty" db:"timeout_duration"` // in seconds
 
 	// Workflow resumer fields
-	PausedAt       *time.Time  `json:"paused_at,omitempty" db:"paused_at"`
-	PausedReason   *string     `json:"paused_reason,omitempty" db:"paused_reason"`
-	PausedStepID   *uuid.UUID  `json:"paused_step_id,omitempty" db:"paused_step_id"`
-	NextStepID     *uuid.UUID  `json:"next_step_id,omitempty" db:"next_step_id"`
-	ResumeData     JSONB       `json:"resume_data,omitempty" db:"resume_data"`
-	ResumeCount    int         `json:"resume_count" db:"resume_count"`
-	LastResumedAt  *time.Time  `json:"last_resumed_at,omitempty" db:"last_resumed_at"`
+	PausedAt      *time.Time `json:"paused_at,omitempty" db:"paused_at"`
+	PausedReason  *string    `json:"paused_reason,omitempty" db:"paused_reason"`
+	PausedStepID  *uuid.UUID `json:"paused_step_id,omitempty" db:"paused_step_id"`
+	NextStepID    *uuid.UUID `json:"next_step_id,omitempty" db:"next_step_id"`
+	ResumeData    JSONB      `json:"resume_data,omitempty" db:"resume_data"`
+	ResumeCount   int        `json:"resume_count" db:"resume_count"`
+	LastResumedAt *time.Time `json:"last_resumed_at,omitempty" db:"last_resumed_at"`
 }
 
 // WaitState represents the state of a waiting execution
 type WaitState struct {
-	Event      string     `json:"event"`
-	TimeoutAt  *time.Time `json:"timeout_at,omitempty"`
-	OnTimeout  string     `json:"on_timeout,omitempty"`
-	WaitingSince time.Time `json:"waiting_since"`
+	Event        string     `json:"event"`
+	TimeoutAt    *time.Time `json:"timeout_at,omitempty"`
+	OnTimeout    string     `json:"on_timeout,omitempty"`
+	WaitingSince time.Time  `json:"waiting_since"`
 }
 
 // Scan implements the sql.Scanner interface for WaitState

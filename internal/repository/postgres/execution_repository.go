@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/google/uuid"
 )
 
 // ExecutionRepository handles execution database operations

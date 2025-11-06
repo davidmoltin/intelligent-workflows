@@ -18,9 +18,9 @@ const (
 
 // JWTManager handles JWT token operations
 type JWTManager struct {
-	secretKey        []byte
-	accessTokenTTL   time.Duration
-	refreshTokenTTL  time.Duration
+	secretKey       []byte
+	accessTokenTTL  time.Duration
+	refreshTokenTTL time.Duration
 }
 
 // JWTClaims represents the claims in our JWT token
@@ -36,18 +36,18 @@ type JWTClaims struct {
 // NewJWTManager creates a new JWT manager
 func NewJWTManager(secretKey string) *JWTManager {
 	return &JWTManager{
-		secretKey:        []byte(secretKey),
-		accessTokenTTL:   AccessTokenDuration,
-		refreshTokenTTL:  RefreshTokenDuration,
+		secretKey:       []byte(secretKey),
+		accessTokenTTL:  AccessTokenDuration,
+		refreshTokenTTL: RefreshTokenDuration,
 	}
 }
 
 // NewJWTManagerWithTTL creates a new JWT manager with custom TTL
 func NewJWTManagerWithTTL(secretKey string, accessTTL, refreshTTL time.Duration) *JWTManager {
 	return &JWTManager{
-		secretKey:        []byte(secretKey),
-		accessTokenTTL:   accessTTL,
-		refreshTokenTTL:  refreshTTL,
+		secretKey:       []byte(secretKey),
+		accessTokenTTL:  accessTTL,
+		refreshTokenTTL: refreshTTL,
 	}
 }
 

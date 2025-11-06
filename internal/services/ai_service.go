@@ -10,9 +10,9 @@ import (
 
 // AIService handles AI-related operations
 type AIService struct {
-	llmClient        llm.Client
-	templateManager  *llm.TemplateManager
-	logger           *zap.Logger
+	llmClient       llm.Client
+	templateManager *llm.TemplateManager
+	logger          *zap.Logger
 }
 
 // NewAIService creates a new AI service

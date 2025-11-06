@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"github.com/davidmoltin/intelligent-workflows/internal/models"
 )
 
 // EventRepository handles event database operations

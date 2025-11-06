@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 )
 
 // WorkflowRepository defines the interface for workflow data access
@@ -25,10 +25,10 @@ type EventRepository interface {
 
 // EventRouter routes events to matching workflows
 type EventRouter struct {
-	workflowRepo  WorkflowRepository
-	eventRepo     EventRepository
-	executor      *WorkflowExecutor
-	logger        *logger.Logger
+	workflowRepo WorkflowRepository
+	eventRepo    EventRepository
+	executor     *WorkflowExecutor
+	logger       *logger.Logger
 }
 
 // NewEventRouter creates a new event router
@@ -57,11 +57,11 @@ func (er *EventRouter) RouteEvent(
 
 	// Create event record
 	event := &models.Event{
-		ID:        uuid.New(),
-		EventID:   fmt.Sprintf("evt_%s", uuid.New().String()[:8]),
-		EventType: eventType,
-		Source:    source,
-		Payload:   payload,
+		ID:         uuid.New(),
+		EventID:    fmt.Sprintf("evt_%s", uuid.New().String()[:8]),
+		EventType:  eventType,
+		Source:     source,
+		Payload:    payload,
 		ReceivedAt: time.Now(),
 	}
 

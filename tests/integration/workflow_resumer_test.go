@@ -510,10 +510,10 @@ func TestWorkflowResumer_ResumeData_MergeIntegration(t *testing.T) {
 
 	// Resume with additional data
 	additionalData := models.JSONB{
-		"approved":    true,
-		"approver":    "test@example.com",
-		"count":       2, // Should override existing value
-		"new_key":     "new_value",
+		"approved": true,
+		"approver": "test@example.com",
+		"count":    2, // Should override existing value
+		"new_key":  "new_value",
 	}
 	err = resumer.ResumeExecution(ctx, execution.ID, additionalData)
 	require.NoError(t, err)
