@@ -75,6 +75,7 @@ func run() error {
 	userRepo := postgres.NewUserRepository(db.DB)
 	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
+	scheduleRepo := postgres.NewScheduleRepository(db.DB)
 
 	// Initialize workflow engine components
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log)
@@ -148,6 +149,7 @@ func run() error {
 	// Initialize services
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, cfg.App.DefaultApproverEmail)
 	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
+	scheduleService := services.NewScheduleService(scheduleRepo, log)
 
 	// Initialize and start approval expiration worker
 	expirationWorker := workers.NewApprovalExpirationWorker(approvalService, log, 5*time.Minute)
@@ -163,6 +165,10 @@ func run() error {
 	timeoutEnforcerWorker := workers.NewTimeoutEnforcerWorker(executionRepo, log, 1*time.Minute)
 	timeoutEnforcerWorker.Start(workerCtx)
 
+	// Initialize and start scheduler worker
+	schedulerWorker := workers.NewSchedulerWorker(scheduleService, eventRouter, log, 1*time.Minute)
+	schedulerWorker.Start(workerCtx)
+
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
@@ -172,6 +178,7 @@ func run() error {
 		eventRouter,
 		approvalService,
 		authService,
+		scheduleService,
 		workflowResumer,
 		aiService,
 		&handlers.HealthCheckers{
@@ -214,6 +221,7 @@ func run() error {
 
 		// Stop background workers first
 		expirationWorker.Stop()
+		schedulerWorker.Stop()
 
 		// Give outstanding requests a deadline for completion
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)

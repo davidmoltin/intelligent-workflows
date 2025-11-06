@@ -22,6 +22,7 @@ type Handlers struct {
 	Docs      *DocsHandler
 	AI        *AIHandler
 	Analytics *AnalyticsHandler
+	Schedule  *ScheduleHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -39,6 +40,7 @@ func NewHandlers(
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
 	authService *services.AuthService,
+	scheduleService ScheduleService,
 	workflowResumer *services.WorkflowResumerImpl,
 	aiService *services.AIService,
 	healthCheckers *HealthCheckers,
@@ -60,6 +62,7 @@ func NewHandlers(
 		Docs:      NewDocsHandler(),
 		AI:        aiHandler,
 		Analytics: NewAnalyticsHandler(log, analyticsRepo),
+		Schedule:  NewScheduleHandler(log, scheduleService),
 	}
 }
 

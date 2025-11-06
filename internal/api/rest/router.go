@@ -126,6 +126,10 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Workflow.Delete)
 				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/enable", r.handlers.Workflow.Enable)
 				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/disable", r.handlers.Workflow.Disable)
+
+				// Schedule operations
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}/schedules", r.handlers.Schedule.GetWorkflowSchedules)
+				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/schedules", r.handlers.Schedule.CreateSchedule)
 			})
 
 			// Events
@@ -162,6 +166,15 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/workflows", r.handlers.Analytics.GetWorkflowStats)
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/errors", r.handlers.Analytics.GetRecentErrors)
 				router.With(customMiddleware.RequirePermission("execution:read", r.logger)).Get("/steps", r.handlers.Analytics.GetStepStats)
+			})
+
+			// Schedules
+			router.Route("/schedules", func(router chi.Router) {
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/", r.handlers.Schedule.ListSchedules)
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}", r.handlers.Schedule.GetSchedule)
+				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Put("/{id}", r.handlers.Schedule.UpdateSchedule)
+				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Schedule.DeleteSchedule)
+				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}/next-runs", r.handlers.Schedule.GetNextRuns)
 			})
 		})
 

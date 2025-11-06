@@ -222,27 +222,12 @@ func (er *EventRouter) workflowMatchesEvent(workflow models.Workflow, eventType 
 }
 
 // ProcessScheduledWorkflows finds and executes workflows with schedule triggers
+// NOTE: This method is deprecated. Schedule-based workflow execution is now handled
+// by the SchedulerWorker in the workers package, which uses the WorkflowSchedule
+// model and provides more robust cron-based scheduling with timezone support.
+// This method is kept for backward compatibility but does not perform any actions.
 func (er *EventRouter) ProcessScheduledWorkflows(ctx context.Context) error {
-	er.logger.Infof("Processing scheduled workflows")
-
-	// Get all enabled workflows
-	enabled := true
-	workflows, _, err := er.workflowRepo.ListWorkflows(ctx, &enabled, 1000, 0)
-	if err != nil {
-		return fmt.Errorf("failed to list workflows: %w", err)
-	}
-
-	// Find workflows with schedule triggers
-	for _, workflow := range workflows {
-		if workflow.Definition.Trigger.Type == "schedule" {
-			// TODO: Implement cron-based scheduling
-			// This would typically be handled by a separate scheduler service
-			// For now, this is a placeholder
-			er.logger.Debugf("Found scheduled workflow: %s with cron: %s",
-				workflow.Name, workflow.Definition.Trigger.Cron)
-		}
-	}
-
+	er.logger.Debugf("ProcessScheduledWorkflows called - schedule triggers are now handled by SchedulerWorker")
 	return nil
 }
 
