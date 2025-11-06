@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useExecutionTrace } from '@/api/hooks'
+import { useExecutionUpdates } from '@/hooks/useWebSocket'
 import {
   Card,
   CardContent,
@@ -10,14 +11,22 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, ChevronDown, ChevronRight, Clock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Clock, AlertCircle, CheckCircle2, Loader2, Radio } from 'lucide-react'
 import type { StepExecution } from '@/types/workflow'
 
 export function ExecutionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: trace, isLoading, error } = useExecutionTrace(id!)
+  const { data: trace, isLoading, error, refetch } = useExecutionTrace(id!)
+  const { execution: liveExecution, isLive } = useExecutionUpdates(id)
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+
+  // Refetch trace when execution updates via WebSocket
+  useEffect(() => {
+    if (liveExecution) {
+      refetch()
+    }
+  }, [liveExecution, refetch])
 
   const toggleStep = (stepId: string) => {
     const newExpanded = new Set(expandedSteps)
@@ -119,9 +128,17 @@ export function ExecutionDetailPage() {
             </p>
           </div>
         </div>
-        <Badge variant={getStatusVariant(execution.status)} className="text-sm">
-          {execution.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {isLive && (
+            <Badge variant="outline" className="gap-1.5">
+              <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+              Live
+            </Badge>
+          )}
+          <Badge variant={getStatusVariant(execution.status)} className="text-sm">
+            {execution.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Execution Overview */}

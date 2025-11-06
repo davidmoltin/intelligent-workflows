@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
+	"github.com/davidmoltin/intelligent-workflows/internal/websocket"
 	"github.com/davidmoltin/intelligent-workflows/internal/workers"
 	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
@@ -81,8 +83,16 @@ func run() error {
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
 
+	// Initialize WebSocket hub
+	wsHub := websocket.NewHub(redis.Client, log.Logger)
+	if err := wsHub.Start(); err != nil {
+		return fmt.Errorf("failed to start WebSocket hub: %w", err)
+	}
+	defer wsHub.Stop()
+	log.Info("WebSocket hub initialized")
+
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, wsHub, log, metricsRegistry)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -185,6 +195,7 @@ func run() error {
 		scheduleService,
 		workflowResumer,
 		aiService,
+		wsHub,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,

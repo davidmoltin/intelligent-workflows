@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/internal/websocket"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/google/uuid"
@@ -29,6 +30,7 @@ type WorkflowExecutor struct {
 	actionExecutor *ActionExecutor
 	executionRepo  ExecutionRepository
 	workflowRepo   WorkflowRepository
+	wsHub          *websocket.Hub
 	logger         *logger.Logger
 	metrics        *metrics.Metrics
 	maxRetries     int
@@ -40,6 +42,7 @@ func NewWorkflowExecutor(
 	redis *redis.Client,
 	executionRepo ExecutionRepository,
 	workflowRepo WorkflowRepository,
+	wsHub *websocket.Hub,
 	log *logger.Logger,
 	m *metrics.Metrics,
 ) *WorkflowExecutor {
@@ -49,6 +52,7 @@ func NewWorkflowExecutor(
 		actionExecutor: NewActionExecutor(log),
 		executionRepo:  executionRepo,
 		workflowRepo:   workflowRepo,
+		wsHub:          wsHub,
 		logger:         log,
 		metrics:        m,
 		maxRetries:     3,
@@ -111,6 +115,9 @@ func (we *WorkflowExecutor) Execute(
 	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
 		return nil, fmt.Errorf("failed to create execution: %w", err)
 	}
+
+	// Broadcast execution started event
+	we.broadcastExecutionEvent(execution)
 
 	// Build execution context
 	execContext, err := we.contextBuilder.BuildContext(ctx, triggerPayload, workflow.Definition.Context)
@@ -713,6 +720,57 @@ func (we *WorkflowExecutor) completeExecution(
 	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
 		we.logger.Errorf("Failed to update execution: %v", err)
 	}
+
+	// Broadcast execution completion event
+	we.broadcastExecutionEvent(execution)
+}
+
+// broadcastExecutionEvent broadcasts an execution state change via WebSocket
+func (we *WorkflowExecutor) broadcastExecutionEvent(execution *models.WorkflowExecution) {
+	if we.wsHub == nil {
+		return
+	}
+
+	var msgType websocket.MessageType
+	switch execution.Status {
+	case models.ExecutionStatusRunning:
+		msgType = websocket.MessageTypeExecutionStarted
+	case models.ExecutionStatusCompleted:
+		msgType = websocket.MessageTypeExecutionCompleted
+	case models.ExecutionStatusFailed:
+		msgType = websocket.MessageTypeExecutionFailed
+	case models.ExecutionStatusPaused, models.ExecutionStatusWaiting:
+		msgType = websocket.MessageTypeExecutionPaused
+	case models.ExecutionStatusCancelled:
+		msgType = websocket.MessageTypeExecutionCancelled
+	default:
+		return
+	}
+
+	eventData := &websocket.ExecutionEventData{
+		ExecutionID:  execution.ExecutionID,
+		WorkflowID:   execution.WorkflowID.String(),
+		Status:       string(execution.Status),
+		TriggerEvent: execution.TriggerEvent,
+		StartedAt:    &execution.StartedAt,
+		CompletedAt:  execution.CompletedAt,
+		DurationMs:   execution.DurationMs,
+		Context:      execution.Context,
+	}
+
+	if execution.Result != nil {
+		eventData.Result = string(*execution.Result)
+	}
+
+	if execution.ErrorMessage != nil {
+		eventData.ErrorMessage = *execution.ErrorMessage
+	}
+
+	if execution.PausedReason != nil {
+		eventData.PausedReason = *execution.PausedReason
+	}
+
+	we.wsHub.BroadcastExecutionEvent(msgType, eventData)
 }
 
 // calculateBackoff calculates backoff duration for retries

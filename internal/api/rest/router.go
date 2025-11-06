@@ -90,6 +90,12 @@ func (r *Router) SetupRoutes() {
 	r.router.Get("/health", r.handlers.Health.Health)
 	r.router.Get("/ready", r.handlers.Health.Ready)
 
+	// WebSocket endpoint (requires authentication)
+	r.router.Group(func(router chi.Router) {
+		router.Use(customMiddleware.OptionalAuth(r.authService, r.logger))
+		router.HandleFunc("/ws", r.handlers.WebSocket.HandleWebSocket)
+	})
+
 	// API v1
 	r.router.Route("/api/v1", func(router chi.Router) {
 		// API Documentation (public)
