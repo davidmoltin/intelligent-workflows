@@ -340,6 +340,10 @@ func (we *WorkflowExecutor) executeStep(
 		actionResult, err = we.executeActionStep(ctx, step, execContext)
 		nextStepID = "" // Action steps end the flow
 
+	case "execute":
+		actionResult, err = we.executeExecuteStep(ctx, step, execContext)
+		nextStepID = "" // Execute steps end the flow
+
 	case "parallel":
 		err = we.executeParallelStep(ctx, execution, step, execContext)
 		nextStepID = "" // Parallel steps end the flow for now
@@ -411,6 +415,29 @@ func (we *WorkflowExecutor) executeActionStep(
 	execContext map[string]interface{},
 ) (*ActionResult, error) {
 	return we.actionExecutor.ExecuteAction(ctx, step, execContext)
+}
+
+// executeExecuteStep executes an execute step (webhooks, notifications, etc.)
+func (we *WorkflowExecutor) executeExecuteStep(
+	ctx context.Context,
+	step *models.Step,
+	execContext map[string]interface{},
+) (*ActionResult, error) {
+	if len(step.Execute) == 0 {
+		return nil, fmt.Errorf("execute step has no execute actions defined")
+	}
+
+	// Create a synthetic Action with type "execute" to reuse existing logic
+	syntheticStep := &models.Step{
+		ID:   step.ID,
+		Type: "action",
+		Action: &models.Action{
+			Type: "execute",
+		},
+		Execute: step.Execute,
+	}
+
+	return we.actionExecutor.ExecuteAction(ctx, syntheticStep, execContext)
 }
 
 // executeParallelStep executes steps in parallel
