@@ -16,38 +16,59 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { ApprovalDialog } from '@/components/ApprovalDialog'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { useState } from 'react'
+
+type DialogState = {
+  open: boolean
+  action: 'approve' | 'reject'
+  approvalId: string
+  requestId: string
+}
 
 export function ApprovalsPage() {
   const { data: approvals, isLoading, error } = useApprovals()
   const approveRequest = useApproveRequest()
   const rejectRequest = useRejectRequest()
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [dialogState, setDialogState] = useState<DialogState>({
+    open: false,
+    action: 'approve',
+    approvalId: '',
+    requestId: '',
+  })
 
-  const handleApprove = async (id: string) => {
-    const reason = prompt('Enter approval reason:')
-    if (!reason) return
-
-    setProcessingId(id)
-    try {
-      await approveRequest.mutateAsync({ id, reason })
-    } catch (error) {
-      console.error('Failed to approve:', error)
-    } finally {
-      setProcessingId(null)
-    }
+  const handleApprove = (id: string, requestId: string) => {
+    setDialogState({
+      open: true,
+      action: 'approve',
+      approvalId: id,
+      requestId,
+    })
   }
 
-  const handleReject = async (id: string) => {
-    const reason = prompt('Enter rejection reason:')
-    if (!reason) return
+  const handleReject = (id: string, requestId: string) => {
+    setDialogState({
+      open: true,
+      action: 'reject',
+      approvalId: id,
+      requestId,
+    })
+  }
 
-    setProcessingId(id)
+  const handleConfirm = async (reason: string) => {
+    const { approvalId, action } = dialogState
+    setProcessingId(approvalId)
+
     try {
-      await rejectRequest.mutateAsync({ id, reason })
+      if (action === 'approve') {
+        await approveRequest.mutateAsync({ id: approvalId, reason })
+      } else {
+        await rejectRequest.mutateAsync({ id: approvalId, reason })
+      }
     } catch (error) {
-      console.error('Failed to reject:', error)
+      console.error(`Failed to ${action}:`, error)
     } finally {
       setProcessingId(null)
     }
@@ -188,7 +209,7 @@ export function ApprovalsPage() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          onClick={() => handleApprove(approval.id)}
+                          onClick={() => handleApprove(approval.id, approval.request_id)}
                           disabled={
                             processingId === approval.id ||
                             approveRequest.isPending
@@ -200,7 +221,7 @@ export function ApprovalsPage() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleReject(approval.id)}
+                          onClick={() => handleReject(approval.id, approval.request_id)}
                           disabled={
                             processingId === approval.id ||
                             rejectRequest.isPending
@@ -277,6 +298,16 @@ export function ApprovalsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Approval Dialog */}
+      <ApprovalDialog
+        open={dialogState.open}
+        onOpenChange={(open) => setDialogState({ ...dialogState, open })}
+        action={dialogState.action}
+        requestId={dialogState.requestId}
+        onConfirm={handleConfirm}
+        isLoading={processingId === dialogState.approvalId}
+      />
     </div>
   )
 }
