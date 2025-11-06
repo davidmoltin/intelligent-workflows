@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
@@ -150,17 +149,17 @@ func run() error {
 	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
 
 	// Initialize and start approval expiration worker
-	expirationWorker := workers.NewApprovalExpirationWorker(approvalService, log, 5*time.Minute)
+	expirationWorker := workers.NewApprovalExpirationWorker(approvalService, log, cfg.Workers.ApprovalExpirationCheckInterval)
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	defer cancelWorker()
 	expirationWorker.Start(workerCtx)
 
 	// Initialize and start workflow resumer worker
-	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, 1*time.Minute)
+	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, cfg.Workers.WorkflowResumerCheckInterval)
 	resumerWorker.Start(workerCtx)
 
 	// Initialize and start timeout enforcer worker
-	timeoutEnforcerWorker := workers.NewTimeoutEnforcerWorker(executionRepo, log, 1*time.Minute)
+	timeoutEnforcerWorker := workers.NewTimeoutEnforcerWorker(executionRepo, log, cfg.Workers.TimeoutEnforcerCheckInterval)
 	timeoutEnforcerWorker.Start(workerCtx)
 
 	// Initialize handlers

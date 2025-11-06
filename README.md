@@ -179,30 +179,94 @@ gosec ./...
 
 ## Configuration
 
-Configuration can be provided via environment variables or a configuration file:
+The application is configured through environment variables. Copy `.env.example` to `.env` and customize as needed:
 
 ```bash
-# Database
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_USER=postgres
-export DB_PASSWORD=password
-export DB_NAME=intelligent_workflows
-
-# Redis
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-
-# JWT
-export JWT_SECRET=your-secret-key
-export JWT_EXPIRATION=15m
-
-# API
-export API_PORT=8080
-export API_HOST=0.0.0.0
+cp .env.example .env
 ```
 
-See [GETTING_STARTED.md](./GETTING_STARTED.md) for detailed configuration options.
+### Environment Variables
+
+#### Server Configuration
+- `SERVER_HOST` - Server host address (default: `0.0.0.0`)
+- `SERVER_PORT` - Server port (default: `8080`)
+- `SERVER_READ_TIMEOUT` - HTTP read timeout (default: `15s`)
+- `SERVER_WRITE_TIMEOUT` - HTTP write timeout (default: `15s`)
+- `SERVER_SHUTDOWN_TIMEOUT` - Graceful shutdown timeout (default: `30s`)
+
+#### Database Configuration
+- `DB_HOST` - PostgreSQL host (default: `localhost`)
+- `DB_PORT` - PostgreSQL port (default: `5432`)
+- `DB_USER` - Database user (default: `postgres`)
+- `DB_PASSWORD` - Database password (**required in production**)
+- `DB_NAME` - Database name (default: `workflows`)
+- `DB_SSL_MODE` - SSL mode: `disable`, `require`, `verify-ca`, `verify-full` (default: `require`)
+- `DB_MAX_OPEN_CONNS` - Maximum open connections (default: `25`)
+- `DB_MAX_IDLE_CONNS` - Maximum idle connections (default: `5`)
+- `DB_CONN_MAX_LIFETIME` - Connection max lifetime (default: `5m`)
+
+#### Redis Configuration
+- `REDIS_HOST` - Redis host (default: `localhost`)
+- `REDIS_PORT` - Redis port (default: `6379`)
+- `REDIS_PASSWORD` - Redis password (optional)
+- `REDIS_DB` - Redis database number (default: `0`)
+
+#### Application Configuration
+- `APP_ENV` - Environment: `development`, `staging`, `production` (default: `development`)
+- `APP_VERSION` - Application version (default: `0.1.0`)
+- `APP_NAME` - Application name (default: `intelligent-workflows`)
+- `DEFAULT_APPROVER_EMAIL` - Default approver email (default: `approver@example.com`)
+
+#### Authentication & Security
+- `JWT_SECRET` - JWT signing secret (**required in production, will fail if not set**)
+- `JWT_ACCESS_TOKEN_TTL` - Access token TTL (default: `15m`)
+- `JWT_REFRESH_TOKEN_TTL` - Refresh token TTL (default: `168h`)
+- `ALLOWED_ORIGINS` - Comma-separated CORS origins (default: `http://localhost:3000`)
+
+#### Notification Configuration
+- `NOTIFICATION_BASE_URL` - Base URL for notification links (default: `http://localhost:8080`)
+- `NOTIFICATION_EMAIL_ENABLED` - Enable email notifications (default: `false`)
+- `NOTIFICATION_SMTP_HOST` - SMTP server host (default: `smtp.gmail.com`)
+- `NOTIFICATION_SMTP_PORT` - SMTP server port (default: `587`)
+- `NOTIFICATION_SMTP_USER` - SMTP username
+- `NOTIFICATION_SMTP_PASSWORD` - SMTP password
+- `NOTIFICATION_FROM_ADDRESS` - Email from address (default: `noreply@example.com`)
+- `NOTIFICATION_SLACK_ENABLED` - Enable Slack notifications (default: `false`)
+- `NOTIFICATION_SLACK_WEBHOOK_URL` - Slack webhook URL
+
+#### LLM Provider Configuration
+- `LLM_PROVIDER` - LLM provider: `anthropic` or `openai` (default: `anthropic`)
+- `LLM_API_KEY` - LLM API key (required for AI features)
+- `LLM_DEFAULT_MODEL` - Default model to use (optional)
+- `LLM_TIMEOUT` - LLM request timeout (default: `60s`)
+- `LLM_MAX_RETRIES` - Maximum retry attempts (default: `3`)
+- `LLM_RETRY_DELAY` - Delay between retries (default: `1s`)
+- `LLM_BASE_URL` - Custom LLM API base URL (optional)
+
+#### Rate Limiting
+- `RATE_LIMIT_REQUESTS_PER_SECOND` - Requests per second (default: `100`)
+- `RATE_LIMIT_BURST` - Burst capacity (default: `200`)
+
+#### Background Workers
+- `WORKER_APPROVAL_EXPIRATION_INTERVAL` - Approval expiration check interval (default: `5m`)
+- `WORKER_WORKFLOW_RESUMER_INTERVAL` - Workflow resumer check interval (default: `1m`)
+- `WORKER_TIMEOUT_ENFORCER_INTERVAL` - Timeout enforcer check interval (default: `1m`)
+- `WORKER_SCHEDULER_INTERVAL` - Scheduler check interval (default: `1m`)
+
+#### Logging
+- `LOG_LEVEL` - Log level: `debug`, `info`, `warn`, `error` (default: `info`)
+- `LOG_FORMAT` - Log format: `json` or `text` (default: `json`)
+
+### Security Considerations
+
+⚠️ **Important**: In production environments:
+- Always set `JWT_SECRET` to a strong random value (application will fail to start without it)
+- Change `DB_PASSWORD` from the default value
+- Set `DB_SSL_MODE=require` or higher
+- Use strong SMTP credentials if email notifications are enabled
+- Limit `ALLOWED_ORIGINS` to your specific frontend domains
+
+See the complete `.env.example` file for a full configuration template.
 
 ## Deployment
 

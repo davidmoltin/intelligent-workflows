@@ -16,6 +16,7 @@ type Config struct {
 	App          AppConfig
 	Notification NotificationConfig
 	LLM          LLMConfig
+	Workers      WorkersConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -96,6 +97,14 @@ type LLMConfig struct {
 	BaseURL      string
 }
 
+// WorkersConfig holds background worker configuration
+type WorkersConfig struct {
+	ApprovalExpirationCheckInterval time.Duration
+	WorkflowResumerCheckInterval    time.Duration
+	TimeoutEnforcerCheckInterval    time.Duration
+	SchedulerCheckInterval          time.Duration
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -156,6 +165,12 @@ func Load() (*Config, error) {
 			MaxRetries:   getEnvAsInt("LLM_MAX_RETRIES", 3),
 			RetryDelay:   getEnvAsDuration("LLM_RETRY_DELAY", 1*time.Second),
 			BaseURL:      getEnv("LLM_BASE_URL", ""),
+		},
+		Workers: WorkersConfig{
+			ApprovalExpirationCheckInterval: getEnvAsDuration("WORKER_APPROVAL_EXPIRATION_INTERVAL", 5*time.Minute),
+			WorkflowResumerCheckInterval:    getEnvAsDuration("WORKER_WORKFLOW_RESUMER_INTERVAL", 1*time.Minute),
+			TimeoutEnforcerCheckInterval:    getEnvAsDuration("WORKER_TIMEOUT_ENFORCER_INTERVAL", 1*time.Minute),
+			SchedulerCheckInterval:          getEnvAsDuration("WORKER_SCHEDULER_INTERVAL", 1*time.Minute),
 		},
 	}
 
