@@ -288,7 +288,7 @@ func (s *AuthService) ValidateAccessToken(tokenString string) (*auth.JWTClaims, 
 }
 
 // CreateAPIKey creates a new API key for a user
-func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *models.CreateAPIKeyRequest) (*models.CreateAPIKeyResponse, error) {
+func (s *AuthService) CreateAPIKey(ctx context.Context, organizationID, userID uuid.UUID, req *models.CreateAPIKeyRequest) (*models.CreateAPIKeyResponse, error) {
 	// Generate API key
 	apiKeyString, err := auth.GenerateAPIKey()
 	if err != nil {
@@ -297,14 +297,15 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *m
 
 	// Create API key record
 	apiKey := &models.APIKey{
-		KeyHash:   auth.HashAPIKey(apiKeyString),
-		KeyPrefix: auth.GetAPIKeyPrefix(apiKeyString),
-		Name:      req.Name,
-		UserID:    userID,
-		Scopes:    req.Scopes,
-		IsActive:  true,
-		ExpiresAt: req.ExpiresAt,
-		CreatedBy: &userID,
+		OrganizationID: organizationID,
+		KeyHash:        auth.HashAPIKey(apiKeyString),
+		KeyPrefix:      auth.GetAPIKeyPrefix(apiKeyString),
+		Name:           req.Name,
+		UserID:         userID,
+		Scopes:         req.Scopes,
+		IsActive:       true,
+		ExpiresAt:      req.ExpiresAt,
+		CreatedBy:      &userID,
 	}
 
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
