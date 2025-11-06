@@ -12,8 +12,8 @@ import (
 
 // SimpleWorkflowRepository is a simple in-memory mock for testing
 type SimpleWorkflowRepository struct {
-	mu        sync.RWMutex
-	workflows map[uuid.UUID]*models.Workflow
+	mu           sync.RWMutex
+	workflows    map[uuid.UUID]*models.Workflow
 	byWorkflowID map[string]map[string]*models.Workflow // workflowID -> version -> workflow
 }
 

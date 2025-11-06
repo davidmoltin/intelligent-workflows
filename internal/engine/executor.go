@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 // ExecutionRepository defines the interface for execution persistence
@@ -23,14 +23,14 @@ type ExecutionRepository interface {
 
 // WorkflowExecutor executes workflows
 type WorkflowExecutor struct {
-	evaluator       *Evaluator
-	contextBuilder  *ContextBuilder
-	actionExecutor  *ActionExecutor
-	executionRepo   ExecutionRepository
-	workflowRepo    WorkflowRepository
-	logger          *logger.Logger
-	maxRetries      int
-	defaultTimeout  time.Duration
+	evaluator      *Evaluator
+	contextBuilder *ContextBuilder
+	actionExecutor *ActionExecutor
+	executionRepo  ExecutionRepository
+	workflowRepo   WorkflowRepository
+	logger         *logger.Logger
+	maxRetries     int
+	defaultTimeout time.Duration
 }
 
 // NewWorkflowExecutor creates a new workflow executor
@@ -41,14 +41,14 @@ func NewWorkflowExecutor(
 	log *logger.Logger,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
-		evaluator:       NewEvaluator(),
-		contextBuilder:  NewContextBuilder(redis, log),
-		actionExecutor:  NewActionExecutor(log),
-		executionRepo:   executionRepo,
-		workflowRepo:    workflowRepo,
-		logger:          log,
-		maxRetries:      3,
-		defaultTimeout:  30 * time.Second,
+		evaluator:      NewEvaluator(),
+		contextBuilder: NewContextBuilder(redis, log),
+		actionExecutor: NewActionExecutor(log),
+		executionRepo:  executionRepo,
+		workflowRepo:   workflowRepo,
+		logger:         log,
+		maxRetries:     3,
+		defaultTimeout: 30 * time.Second,
 	}
 }
 

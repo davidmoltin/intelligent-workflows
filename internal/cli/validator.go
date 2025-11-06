@@ -71,14 +71,14 @@ func validateDefinition(def *models.WorkflowDefinition) error {
 	}
 
 	validTriggers := map[string]bool{
-		"order.created":   true,
-		"order.updated":   true,
-		"order.cancelled": true,
-		"payment.success": true,
-		"payment.failed":  true,
-		"inventory.low":   true,
+		"order.created":    true,
+		"order.updated":    true,
+		"order.cancelled":  true,
+		"payment.success":  true,
+		"payment.failed":   true,
+		"inventory.low":    true,
 		"customer.created": true,
-		"custom":          true,
+		"custom":           true,
 	}
 
 	if !validTriggers[def.Trigger.Type] {

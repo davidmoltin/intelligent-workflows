@@ -124,11 +124,11 @@ type LoginRequest struct {
 
 // LoginResponse represents a login response with tokens
 type LoginResponse struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresIn    int       `json:"expires_in"` // seconds
-	TokenType    string    `json:"token_type"`
-	User         User      `json:"user"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"` // seconds
+	TokenType    string `json:"token_type"`
+	User         User   `json:"user"`
 }
 
 // RefreshTokenRequest represents a token refresh request
@@ -138,16 +138,16 @@ type RefreshTokenRequest struct {
 
 // CreateAPIKeyRequest represents a request to create an API key
 type CreateAPIKeyRequest struct {
-	Name      string    `json:"name" validate:"required"`
-	Scopes    []string  `json:"scopes" validate:"required"`
+	Name      string     `json:"name" validate:"required"`
+	Scopes    []string   `json:"scopes" validate:"required"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // CreateAPIKeyResponse represents the response when creating an API key
 type CreateAPIKeyResponse struct {
-	APIKey    string    `json:"api_key"` // Full key, only shown once
-	KeyPrefix string    `json:"key_prefix"`
-	Name      string    `json:"name"`
+	APIKey    string     `json:"api_key"` // Full key, only shown once
+	KeyPrefix string     `json:"key_prefix"`
+	Name      string     `json:"name"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 

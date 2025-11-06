@@ -11,8 +11,8 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest"
 	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/handlers"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
+	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/testutil"
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -36,17 +36,18 @@ func NewTestServer(t *testing.T) *TestServer {
 	migrationsPath := "../../migrations/postgres"
 	testutil.RunMigrations(t, db, migrationsPath)
 
-	// Create router
-	router := chi.NewRouter()
-
 	// Setup handlers (simplified - in real implementation would wire up all dependencies)
 	h := &handlers.Handlers{
 		// Health and readiness handlers
 		Health: &handlers.HealthHandler{},
 	}
 
-	// Setup routes
-	rest.SetupRoutes(router, h)
+	// Create test logger
+	log := logger.NewForTesting()
+
+	// Create router with handlers
+	router := rest.NewRouter(log, h, nil)
+	router.SetupRoutes()
 
 	// Find available port
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -59,7 +60,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	// Create server
 	server := &http.Server{
 		Addr:         fmt.Sprintf("127.0.0.1:%d", port),
-		Handler:      router,
+		Handler:      router.Handler(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}

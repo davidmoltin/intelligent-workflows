@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // ExecutionHandler handles execution-related HTTP requests
@@ -247,7 +247,7 @@ func (h *ExecutionHandler) ListPausedExecutions(w http.ResponseWriter, r *http.R
 
 	response := struct {
 		Executions []*models.WorkflowExecution `json:"executions"`
-		Count      int                          `json:"count"`
+		Count      int                         `json:"count"`
 	}{
 		Executions: executions,
 		Count:      len(executions),

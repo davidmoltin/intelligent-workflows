@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	eventFile string
+	eventFile     string
 	waitForResult bool
-	timeout int
+	timeout       int
 )
 
 var testCmd = &cobra.Command{

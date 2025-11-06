@@ -48,14 +48,14 @@ func TestLoad(t *testing.T) {
 		{
 			name: "custom values",
 			env: map[string]string{
-				"SERVER_PORT":     "9000",
-				"DB_HOST":         "db.example.com",
-				"DB_PORT":         "5433",
-				"DB_NAME":         "custom_db",
-				"REDIS_HOST":      "redis.example.com",
-				"REDIS_PORT":      "6380",
-				"LOG_LEVEL":       "debug",
-				"APP_ENV":         "production",
+				"SERVER_PORT": "9000",
+				"DB_HOST":     "db.example.com",
+				"DB_PORT":     "5433",
+				"DB_NAME":     "custom_db",
+				"REDIS_HOST":  "redis.example.com",
+				"REDIS_PORT":  "6380",
+				"LOG_LEVEL":   "debug",
+				"APP_ENV":     "production",
 			},
 			check: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 9000, cfg.Server.Port)
