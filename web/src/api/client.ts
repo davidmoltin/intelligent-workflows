@@ -3,6 +3,7 @@ import type {
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
   Execution,
+  ExecutionTraceResponse,
   ApprovalRequest,
   IngestEventRequest,
 } from '@/types/workflow'
@@ -131,6 +132,10 @@ export const executionAPI = {
 
   get: async (id: string) => {
     return fetchAPI<Execution>(`/executions/${id}`)
+  },
+
+  getTrace: async (id: string) => {
+    return fetchAPI<ExecutionTraceResponse>(`/executions/${id}/trace`)
   },
 }
 

@@ -12,6 +12,7 @@ export const queryKeys = {
   workflow: (id: string) => ['workflows', id] as const,
   executions: ['executions'] as const,
   execution: (id: string) => ['executions', id] as const,
+  executionTrace: (id: string) => ['executions', id, 'trace'] as const,
   approvals: ['approvals'] as const,
   approval: (id: string) => ['approvals', id] as const,
 }
@@ -111,6 +112,14 @@ export function useExecution(id: string) {
   return useQuery({
     queryKey: queryKeys.execution(id),
     queryFn: () => executionAPI.get(id),
+    enabled: !!id,
+  })
+}
+
+export function useExecutionTrace(id: string) {
+  return useQuery({
+    queryKey: queryKeys.executionTrace(id),
+    queryFn: () => executionAPI.getTrace(id),
     enabled: !!id,
   })
 }

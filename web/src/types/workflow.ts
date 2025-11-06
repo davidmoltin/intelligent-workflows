@@ -98,11 +98,19 @@ export interface StepExecution {
   step_id: string
   step_type: string
   status: ExecutionStatus
+  input?: Record<string, any>
+  output?: Record<string, any>
   result?: any
   started_at: string
   completed_at?: string
   duration_ms?: number
   error_message?: string
+}
+
+export interface ExecutionTraceResponse {
+  execution: Execution
+  steps: StepExecution[]
+  workflow?: Workflow
 }
 
 export interface ApprovalRequest {

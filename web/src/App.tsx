@@ -5,6 +5,7 @@ import { CreateWorkflowPage } from './pages/CreateWorkflowPage'
 import { WorkflowDetailPage } from './pages/WorkflowDetailPage'
 import { EditWorkflowPage } from './pages/EditWorkflowPage'
 import { ExecutionsPage } from './pages/ExecutionsPage'
+import { ExecutionDetailPage } from './pages/ExecutionDetailPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 
@@ -18,6 +19,7 @@ function App() {
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
         <Route path="/workflows/:id/edit" element={<EditWorkflowPage />} />
         <Route path="/executions" element={<ExecutionsPage />} />
+        <Route path="/executions/:id" element={<ExecutionDetailPage />} />
         <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="*" element={<NotFound />} />
