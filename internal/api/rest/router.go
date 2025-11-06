@@ -9,9 +9,11 @@ import (
 	customMiddleware "github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Router holds the HTTP router and dependencies
@@ -20,10 +22,11 @@ type Router struct {
 	logger      *logger.Logger
 	handlers    *handlers.Handlers
 	authService *services.AuthService
+	metrics     *metrics.Metrics
 }
 
 // NewRouter creates a new HTTP router
-func NewRouter(log *logger.Logger, h *handlers.Handlers, authService *services.AuthService) *Router {
+func NewRouter(log *logger.Logger, h *handlers.Handlers, authService *services.AuthService, m *metrics.Metrics) *Router {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -32,6 +35,9 @@ func NewRouter(log *logger.Logger, h *handlers.Handlers, authService *services.A
 	r.Use(customMiddleware.Logger(log))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
+
+	// Metrics middleware
+	r.Use(customMiddleware.Metrics(m))
 
 	// Security middleware
 	r.Use(customMiddleware.SecurityHeaders())
@@ -71,11 +77,15 @@ func NewRouter(log *logger.Logger, h *handlers.Handlers, authService *services.A
 		logger:      log,
 		handlers:    h,
 		authService: authService,
+		metrics:     m,
 	}
 }
 
 // SetupRoutes configures all API routes
 func (r *Router) SetupRoutes() {
+	// Prometheus metrics endpoint (no auth required)
+	r.router.Handle("/metrics", promhttp.Handler())
+
 	// Health endpoints (no auth required)
 	r.router.Get("/health", r.handlers.Health.Health)
 	r.router.Get("/ready", r.handlers.Health.Ready)
