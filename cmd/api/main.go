@@ -77,6 +77,7 @@ func run() error {
 	analyticsRepo := postgres.NewAnalyticsRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	organizationRepo := postgres.NewOrganizationRepository(db.DB)
 	userRepo := postgres.NewUserRepository(db.DB)
 	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
@@ -157,7 +158,7 @@ func run() error {
 
 	// Initialize services
 	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, auditService, cfg.App.DefaultApproverEmail)
-	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
+	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, organizationRepo, jwtManager, log)
 	scheduleService := services.NewScheduleService(scheduleRepo, log)
 
 	// Initialize and start approval expiration worker
