@@ -85,9 +85,9 @@ func (fb *FixtureBuilder) Execution(workflowID uuid.UUID, overrides ...func(*mod
 	now := time.Now()
 
 	execution := &models.WorkflowExecution{
-		ID:          id,
-		ExecutionID: "exec-" + id.String()[:8],
-		WorkflowID:  workflowID,
+		ID:           id,
+		ExecutionID:  "exec-" + id.String()[:8],
+		WorkflowID:   workflowID,
 		TriggerEvent: "order.created",
 		TriggerPayload: models.JSONB{
 			"order_id": "order-123",
@@ -121,8 +121,8 @@ func (fb *FixtureBuilder) Event(overrides ...func(*models.Event)) *models.Event 
 		EventType: "order.created",
 		Source:    "api",
 		Payload: map[string]interface{}{
-			"order_id": "order-123",
-			"total":    1500.00,
+			"order_id":    "order-123",
+			"total":       1500.00,
 			"customer_id": "cust-456",
 		},
 		ReceivedAt: now,

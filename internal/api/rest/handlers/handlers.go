@@ -21,6 +21,7 @@ type Handlers struct {
 	Auth      *AuthHandler
 	Docs      *DocsHandler
 	AI        *AIHandler
+	Analytics *AnalyticsHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -34,6 +35,7 @@ func NewHandlers(
 	log *logger.Logger,
 	workflowRepo *postgres.WorkflowRepository,
 	executionRepo *postgres.ExecutionRepository,
+	analyticsRepo *postgres.AnalyticsRepository,
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
 	authService *services.AuthService,
@@ -57,17 +59,18 @@ func NewHandlers(
 		Auth:      NewAuthHandler(log, authService),
 		Docs:      NewDocsHandler(),
 		AI:        aiHandler,
+		Analytics: NewAnalyticsHandler(log, analyticsRepo),
 	}
 }
 
 // Common error types for safe error handling
 var (
-	ErrInvalidRequest    = errors.New("invalid request")
-	ErrUnauthorized      = errors.New("unauthorized")
-	ErrForbidden         = errors.New("forbidden")
-	ErrNotFound          = errors.New("not found")
-	ErrConflict          = errors.New("resource already exists")
-	ErrInternalError     = errors.New("internal server error")
+	ErrInvalidRequest     = errors.New("invalid request")
+	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
+	ErrNotFound           = errors.New("not found")
+	ErrConflict           = errors.New("resource already exists")
+	ErrInternalError      = errors.New("internal server error")
 	ErrServiceUnavailable = errors.New("service unavailable")
 )
 

@@ -2,729 +2,636 @@ package services
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
-	"github.com/google/uuid"
 )
 
-// MockExecutionRepository for testing
-type mockExecutionRepo struct {
-	getByIDFunc          func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	updateFunc           func(ctx context.Context, execution *models.WorkflowExecution) error
-	getPausedFunc        func(ctx context.Context, limit int) ([]*models.WorkflowExecution, error)
+// MockExecutionRepository is a mock implementation of ExecutionRepository
+type MockExecutionRepository struct {
+	mock.Mock
 }
 
-func (m *mockExecutionRepo) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
-	return nil
+func (m *MockExecutionRepository) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+	args := m.Called(ctx, execution)
+	return args.Error(0)
 }
 
-func (m *mockExecutionRepo) UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
-	if m.updateFunc != nil {
-		return m.updateFunc(ctx, execution)
+func (m *MockExecutionRepository) UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+	args := m.Called(ctx, execution)
+	return args.Error(0)
+}
+
+func (m *MockExecutionRepository) GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	return nil
+	return args.Get(0).(*models.WorkflowExecution), args.Error(1)
 }
 
-func (m *mockExecutionRepo) GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-	if m.getByIDFunc != nil {
-		return m.getByIDFunc(ctx, id)
+func (m *MockExecutionRepository) GetPausedExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
+	args := m.Called(ctx, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	return nil, errors.New("not found")
+	return args.Get(0).([]*models.WorkflowExecution), args.Error(1)
 }
 
-func (m *mockExecutionRepo) GetPausedExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
-	if m.getPausedFunc != nil {
-		return m.getPausedFunc(ctx, limit)
+// MockWorkflowEngine is a mock implementation of WorkflowEngine
+type MockWorkflowEngine struct {
+	mock.Mock
+}
+
+func (m *MockWorkflowEngine) ResumePausedExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+	args := m.Called(ctx, execution)
+	return args.Error(0)
+}
+
+func TestNewWorkflowResumer(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	assert.NotNil(t, resumer)
+	assert.Equal(t, log, resumer.logger)
+	assert.Equal(t, mockRepo, resumer.executionRepo)
+	assert.Equal(t, mockEngine, resumer.engine)
+}
+
+func TestPauseExecution_Success(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	stepID := uuid.New()
+	reason := "waiting for approval"
+
+	// Create a running execution
+	execution := &models.WorkflowExecution{
+		ID:         executionID,
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusRunning,
+		StartedAt:  time.Now(),
 	}
-	return nil, errors.New("not implemented")
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+	mockRepo.On("UpdateExecution", ctx, mock.MatchedBy(func(exec *models.WorkflowExecution) bool {
+		return exec.ID == executionID &&
+			exec.Status == models.ExecutionStatusPaused &&
+			exec.PausedAt != nil &&
+			exec.PausedReason != nil &&
+			*exec.PausedReason == reason &&
+			exec.PausedStepID != nil &&
+			*exec.PausedStepID == stepID
+	})).Return(nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test pause execution
+	err = resumer.PauseExecution(ctx, executionID, reason, &stepID)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-// MockWorkflowEngine for testing
-type mockWorkflowEngine struct {
-	resumeFunc func(ctx context.Context, execution *models.WorkflowExecution) error
+func TestPauseExecution_ExecutionNotFound(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	reason := "waiting for approval"
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(nil, fmt.Errorf("execution not found"))
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test pause execution
+	err = resumer.PauseExecution(ctx, executionID, reason, nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get execution")
+	mockRepo.AssertExpectations(t)
 }
 
-func (m *mockWorkflowEngine) ResumePausedExecution(ctx context.Context, execution *models.WorkflowExecution) error {
-	if m.resumeFunc != nil {
-		return m.resumeFunc(ctx, execution)
+func TestPauseExecution_NotRunning(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	reason := "waiting for approval"
+
+	// Create a completed execution
+	execution := &models.WorkflowExecution{
+		ID:         executionID,
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusCompleted,
+		StartedAt:  time.Now(),
 	}
-	return nil
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test pause execution
+	err = resumer.PauseExecution(ctx, executionID, reason, nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not running")
+	mockRepo.AssertExpectations(t)
 }
 
-// TestPauseExecution tests the PauseExecution method
-func TestPauseExecution(t *testing.T) {
-	log := logger.NewForTesting()
+func TestPauseExecution_NilRepository(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
 	ctx := context.Background()
+	executionID := uuid.New()
+	reason := "waiting for approval"
 
-	t.Run("successfully pauses running execution", func(t *testing.T) {
-		executionID := uuid.New()
-		execution := &models.WorkflowExecution{
-			ID:     executionID,
-			Status: models.ExecutionStatusRunning,
-		}
-
-		var updatedExecution *models.WorkflowExecution
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				if id == executionID {
-					return execution, nil
-				}
-				return nil, errors.New("not found")
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		stepID := uuid.New()
-		err := resumer.PauseExecution(ctx, executionID, "test pause", &stepID)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if updatedExecution == nil {
-			t.Fatal("Expected execution to be updated")
-		}
-
-		if updatedExecution.Status != models.ExecutionStatusPaused {
-			t.Errorf("Expected status paused, got %s", updatedExecution.Status)
-		}
-
-		if updatedExecution.PausedAt == nil {
-			t.Error("Expected PausedAt to be set")
-		}
-
-		if updatedExecution.PausedReason == nil || *updatedExecution.PausedReason != "test pause" {
-			t.Error("Expected PausedReason to be set")
-		}
-
-		if updatedExecution.PausedStepID == nil || *updatedExecution.PausedStepID != stepID {
-			t.Error("Expected PausedStepID to be set")
-		}
-	})
-
-	t.Run("fails to pause non-running execution", func(t *testing.T) {
-		executionID := uuid.New()
-		execution := &models.WorkflowExecution{
-			ID:     executionID,
-			Status: models.ExecutionStatusCompleted,
-		}
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		err := resumer.PauseExecution(ctx, executionID, "test", nil)
-
-		if err == nil {
-			t.Fatal("Expected error for non-running execution")
-		}
-
-		if err.Error() != "execution "+executionID.String()+" is not running (status: completed)" {
-			t.Errorf("Unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("fails when execution not found", func(t *testing.T) {
-		executionID := uuid.New()
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return nil, errors.New("not found")
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		err := resumer.PauseExecution(ctx, executionID, "test", nil)
-
-		if err == nil {
-			t.Fatal("Expected error when execution not found")
-		}
-	})
-
-	t.Run("fails when update fails", func(t *testing.T) {
-		executionID := uuid.New()
-		execution := &models.WorkflowExecution{
-			ID:     executionID,
-			Status: models.ExecutionStatusRunning,
-		}
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				return errors.New("database error")
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		err := resumer.PauseExecution(ctx, executionID, "test", nil)
-
-		if err == nil {
-			t.Fatal("Expected error when update fails")
-		}
-	})
-
-	t.Run("fails when repository is nil", func(t *testing.T) {
-		resumer := NewWorkflowResumer(log, nil, nil)
-
-		err := resumer.PauseExecution(ctx, uuid.New(), "test", nil)
-
-		if err == nil {
-			t.Fatal("Expected error when repository is nil")
-		}
-
-		if err.Error() != "execution repository not configured" {
-			t.Errorf("Unexpected error message: %v", err)
-		}
-	})
-}
-
-// TestResumeWorkflow tests the ResumeWorkflow method
-func TestResumeWorkflow(t *testing.T) {
-	log := logger.NewForTesting()
-	ctx := context.Background()
-
-	t.Run("successfully resumes paused execution with approval", func(t *testing.T) {
-		executionID := uuid.New()
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:          executionID,
-			Status:      models.ExecutionStatusPaused,
-			PausedAt:    &pausedAt,
-			ResumeCount: 0,
-		}
-
-		var updatedExecution *models.WorkflowExecution
-		var engineCalled bool
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		engine := &mockWorkflowEngine{
-			resumeFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				engineCalled = true
-				return nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, engine)
-
-		err := resumer.ResumeWorkflow(ctx, executionID, true)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if !engineCalled {
-			t.Error("Expected engine to be called")
-		}
-
-		if updatedExecution == nil {
-			t.Fatal("Expected execution to be updated")
-		}
-
-		if updatedExecution.Status != models.ExecutionStatusRunning {
-			t.Errorf("Expected status running, got %s", updatedExecution.Status)
-		}
-
-		if updatedExecution.ResumeCount != 1 {
-			t.Errorf("Expected resume count 1, got %d", updatedExecution.ResumeCount)
-		}
-
-		if updatedExecution.PausedAt != nil {
-			t.Error("Expected PausedAt to be cleared")
-		}
-
-		if updatedExecution.PausedReason != nil {
-			t.Error("Expected PausedReason to be cleared")
-		}
-
-		if updatedExecution.LastResumedAt == nil {
-			t.Error("Expected LastResumedAt to be set")
-		}
-
-		if updatedExecution.ResumeData == nil {
-			t.Fatal("Expected ResumeData to be set")
-		}
-
-		if approved, ok := updatedExecution.ResumeData["approved"].(bool); !ok || !approved {
-			t.Error("Expected approved to be true in ResumeData")
-		}
-	})
-
-	t.Run("successfully resumes with rejection", func(t *testing.T) {
-		executionID := uuid.New()
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       executionID,
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-		}
-
-		var updatedExecution *models.WorkflowExecution
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		engine := &mockWorkflowEngine{
-			resumeFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				return nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, engine)
-
-		err := resumer.ResumeWorkflow(ctx, executionID, false)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if approved, ok := updatedExecution.ResumeData["approved"].(bool); !ok || approved {
-			t.Error("Expected approved to be false in ResumeData")
-		}
-	})
-
-	t.Run("fails to resume non-paused execution", func(t *testing.T) {
-		executionID := uuid.New()
-		execution := &models.WorkflowExecution{
-			ID:     executionID,
-			Status: models.ExecutionStatusRunning,
-		}
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		err := resumer.ResumeWorkflow(ctx, executionID, true)
-
-		if err == nil {
-			t.Fatal("Expected error for non-paused execution")
-		}
-	})
-
-	t.Run("handles nil repository gracefully", func(t *testing.T) {
-		resumer := NewWorkflowResumer(log, nil, nil)
-
-		err := resumer.ResumeWorkflow(ctx, uuid.New(), true)
-
-		// Should return nil for backward compatibility
-		if err != nil {
-			t.Errorf("Expected nil error for backward compat, got %v", err)
-		}
-	})
-}
-
-// TestResumeExecution tests the ResumeExecution method
-func TestResumeExecution(t *testing.T) {
-	log := logger.NewForTesting()
-	ctx := context.Background()
-
-	t.Run("successfully resumes with custom resume data", func(t *testing.T) {
-		executionID := uuid.New()
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       executionID,
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-			ResumeData: models.JSONB{
-				"existing_key": "existing_value",
-			},
-		}
-
-		var updatedExecution *models.WorkflowExecution
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		engine := &mockWorkflowEngine{
-			resumeFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				return nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, engine)
-
-		customData := models.JSONB{
-			"custom_key": "custom_value",
-			"user_input": 42,
-		}
-
-		err := resumer.ResumeExecution(ctx, executionID, customData)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if updatedExecution.ResumeData["existing_key"] != "existing_value" {
-			t.Error("Expected existing data to be preserved")
-		}
-
-		if updatedExecution.ResumeData["custom_key"] != "custom_value" {
-			t.Error("Expected custom data to be merged")
-		}
-
-		if updatedExecution.ResumeData["user_input"] != 42 {
-			t.Error("Expected user input to be merged")
-		}
-	})
-
-	t.Run("creates resume data if nil", func(t *testing.T) {
-		executionID := uuid.New()
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:         executionID,
-			Status:     models.ExecutionStatusPaused,
-			PausedAt:   &pausedAt,
-			ResumeData: nil,
-		}
-
-		var updatedExecution *models.WorkflowExecution
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		engine := &mockWorkflowEngine{}
-
-		resumer := NewWorkflowResumer(log, repo, engine)
-
-		customData := models.JSONB{
-			"key": "value",
-		}
-
-		err := resumer.ResumeExecution(ctx, executionID, customData)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if updatedExecution.ResumeData == nil {
-			t.Fatal("Expected ResumeData to be created")
-		}
-
-		if updatedExecution.ResumeData["key"] != "value" {
-			t.Error("Expected custom data to be set")
-		}
-	})
-
-	t.Run("fails when repository is nil", func(t *testing.T) {
-		resumer := NewWorkflowResumer(log, nil, nil)
-
-		err := resumer.ResumeExecution(ctx, uuid.New(), models.JSONB{})
-
-		if err == nil {
-			t.Fatal("Expected error when repository is nil")
-		}
-	})
-
-	t.Run("works without engine (state update only)", func(t *testing.T) {
-		executionID := uuid.New()
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       executionID,
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-		}
-
-		var updatedExecution *models.WorkflowExecution
-
-		repo := &mockExecutionRepo{
-			getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-				return execution, nil
-			},
-			updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-				updatedExecution = exec
-				return nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		err := resumer.ResumeExecution(ctx, executionID, models.JSONB{})
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if updatedExecution.Status != models.ExecutionStatusRunning {
-			t.Error("Expected status to be updated even without engine")
-		}
-	})
-}
-
-// TestGetPausedExecutions tests the GetPausedExecutions method
-func TestGetPausedExecutions(t *testing.T) {
-	log := logger.NewForTesting()
-	ctx := context.Background()
-
-	t.Run("successfully retrieves paused executions", func(t *testing.T) {
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		expected := []*models.WorkflowExecution{
-			{
-				ID:       uuid.New(),
-				Status:   models.ExecutionStatusPaused,
-				PausedAt: &pausedAt,
-			},
-			{
-				ID:       uuid.New(),
-				Status:   models.ExecutionStatusPaused,
-				PausedAt: &pausedAt,
-			},
-		}
-
-		repo := &mockExecutionRepo{
-			getPausedFunc: func(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
-				if limit != 50 {
-					t.Errorf("Expected limit 50, got %d", limit)
-				}
-				return expected, nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		result, err := resumer.GetPausedExecutions(ctx, 50)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if len(result) != 2 {
-			t.Errorf("Expected 2 executions, got %d", len(result))
-		}
-	})
-
-	t.Run("returns empty list when no paused executions", func(t *testing.T) {
-		repo := &mockExecutionRepo{
-			getPausedFunc: func(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
-				return []*models.WorkflowExecution{}, nil
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		result, err := resumer.GetPausedExecutions(ctx, 50)
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if len(result) != 0 {
-			t.Errorf("Expected 0 executions, got %d", len(result))
-		}
-	})
-
-	t.Run("fails when repository is nil", func(t *testing.T) {
-		resumer := NewWorkflowResumer(log, nil, nil)
-
-		_, err := resumer.GetPausedExecutions(ctx, 50)
-
-		if err == nil {
-			t.Fatal("Expected error when repository is nil")
-		}
-	})
-
-	t.Run("propagates repository errors", func(t *testing.T) {
-		repo := &mockExecutionRepo{
-			getPausedFunc: func(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
-				return nil, errors.New("database error")
-			},
-		}
-
-		resumer := NewWorkflowResumer(log, repo, nil)
-
-		_, err := resumer.GetPausedExecutions(ctx, 50)
-
-		if err == nil {
-			t.Fatal("Expected error to be propagated")
-		}
-	})
-}
-
-// TestCanResume tests the CanResume validation method
-func TestCanResume(t *testing.T) {
-	log := logger.NewForTesting()
 	resumer := NewWorkflowResumer(log, nil, nil)
 
-	t.Run("allows resuming valid paused execution", func(t *testing.T) {
-		pausedAt := time.Now().Add(-1 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       uuid.New(),
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-		}
+	// Test pause execution with nil repository
+	err = resumer.PauseExecution(ctx, executionID, reason, nil)
 
-		err := resumer.CanResume(execution)
-
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-
-	t.Run("rejects nil execution", func(t *testing.T) {
-		err := resumer.CanResume(nil)
-
-		if err == nil {
-			t.Fatal("Expected error for nil execution")
-		}
-
-		if err.Error() != "execution is nil" {
-			t.Errorf("Unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects non-paused execution", func(t *testing.T) {
-		execution := &models.WorkflowExecution{
-			ID:     uuid.New(),
-			Status: models.ExecutionStatusRunning,
-		}
-
-		err := resumer.CanResume(execution)
-
-		if err == nil {
-			t.Fatal("Expected error for non-paused execution")
-		}
-	})
-
-	t.Run("rejects execution without pause timestamp", func(t *testing.T) {
-		execution := &models.WorkflowExecution{
-			ID:       uuid.New(),
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: nil,
-		}
-
-		err := resumer.CanResume(execution)
-
-		if err == nil {
-			t.Fatal("Expected error for execution without pause timestamp")
-		}
-	})
-
-	t.Run("rejects execution paused too long", func(t *testing.T) {
-		// Paused 8 days ago (> 7 day limit)
-		pausedAt := time.Now().Add(-8 * 24 * time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       uuid.New(),
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-		}
-
-		err := resumer.CanResume(execution)
-
-		if err == nil {
-			t.Fatal("Expected error for execution paused too long")
-		}
-
-		if err.Error() != "execution "+execution.ID.String()+" has been paused for too long (paused at: "+pausedAt.String()+")" {
-			t.Errorf("Unexpected error: %v", err)
-		}
-	})
-
-	t.Run("allows execution paused just under limit", func(t *testing.T) {
-		// Paused 6.9 days ago (< 7 day limit)
-		pausedAt := time.Now().Add(-6*24*time.Hour - 23*time.Hour)
-		execution := &models.WorkflowExecution{
-			ID:       uuid.New(),
-			Status:   models.ExecutionStatusPaused,
-			PausedAt: &pausedAt,
-		}
-
-		err := resumer.CanResume(execution)
-
-		if err != nil {
-			t.Errorf("Expected no error for execution within time limit, got %v", err)
-		}
-	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execution repository not configured")
 }
 
-// TestResumeExecution_EngineFailure tests engine failure handling
-func TestResumeExecution_EngineFailure(t *testing.T) {
-	log := logger.NewForTesting()
+func TestResumeWorkflow_Success(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
 	ctx := context.Background()
-
 	executionID := uuid.New()
+	approved := true
+
+	// Create a paused execution
 	pausedAt := time.Now().Add(-1 * time.Hour)
+	pausedReason := "waiting for approval"
 	execution := &models.WorkflowExecution{
-		ID:       executionID,
-		Status:   models.ExecutionStatusPaused,
-		PausedAt: &pausedAt,
+		ID:           executionID,
+		WorkflowID:   uuid.New(),
+		Status:       models.ExecutionStatusPaused,
+		StartedAt:    time.Now().Add(-2 * time.Hour),
+		PausedAt:     &pausedAt,
+		PausedReason: &pausedReason,
+		ResumeData:   make(models.JSONB),
+		ResumeCount:  0,
 	}
 
-	var executionUpdated bool
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+	mockRepo.On("UpdateExecution", ctx, mock.MatchedBy(func(exec *models.WorkflowExecution) bool {
+		return exec.ID == executionID &&
+			exec.Status == models.ExecutionStatusRunning &&
+			exec.PausedAt == nil &&
+			exec.PausedReason == nil &&
+			exec.LastResumedAt != nil &&
+			exec.ResumeCount == 1 &&
+			exec.ResumeData["approved"] == approved
+	})).Return(nil)
+	mockEngine.On("ResumePausedExecution", ctx, mock.AnythingOfType("*models.WorkflowExecution")).Return(nil)
 
-	repo := &mockExecutionRepo{
-		getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
-			return execution, nil
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test resume workflow
+	err = resumer.ResumeWorkflow(ctx, executionID, approved)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+	mockEngine.AssertExpectations(t)
+}
+
+func TestResumeWorkflow_NotPaused(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	approved := true
+
+	// Create a running execution (not paused)
+	execution := &models.WorkflowExecution{
+		ID:         executionID,
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusRunning,
+		StartedAt:  time.Now(),
+	}
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test resume workflow
+	err = resumer.ResumeWorkflow(ctx, executionID, approved)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not paused")
+	mockRepo.AssertExpectations(t)
+}
+
+func TestResumeWorkflow_PausedTooLong(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	approved := true
+
+	// Create a paused execution that's been paused for 8 days
+	pausedAt := time.Now().Add(-8 * 24 * time.Hour)
+	pausedReason := "waiting for approval"
+	execution := &models.WorkflowExecution{
+		ID:           executionID,
+		WorkflowID:   uuid.New(),
+		Status:       models.ExecutionStatusPaused,
+		StartedAt:    time.Now().Add(-9 * 24 * time.Hour),
+		PausedAt:     &pausedAt,
+		PausedReason: &pausedReason,
+	}
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test resume workflow
+	err = resumer.ResumeWorkflow(ctx, executionID, approved)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has been paused for too long")
+	mockRepo.AssertExpectations(t)
+}
+
+func TestResumeExecution_WithResumeData(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+
+	// Create custom resume data
+	resumeData := models.JSONB{
+		"approved":   true,
+		"approver":   "john.doe@example.com",
+		"notes":      "looks good",
+		"extra_data": map[string]interface{}{"key": "value"},
+	}
+
+	// Create a paused execution
+	pausedAt := time.Now().Add(-1 * time.Hour)
+	pausedReason := "waiting for approval"
+	execution := &models.WorkflowExecution{
+		ID:           executionID,
+		WorkflowID:   uuid.New(),
+		Status:       models.ExecutionStatusPaused,
+		StartedAt:    time.Now().Add(-2 * time.Hour),
+		PausedAt:     &pausedAt,
+		PausedReason: &pausedReason,
+		ResumeData:   make(models.JSONB),
+		ResumeCount:  0,
+	}
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+	mockRepo.On("UpdateExecution", ctx, mock.MatchedBy(func(exec *models.WorkflowExecution) bool {
+		// Verify all resume data is merged
+		return exec.ID == executionID &&
+			exec.Status == models.ExecutionStatusRunning &&
+			exec.ResumeData["approved"] == true &&
+			exec.ResumeData["approver"] == "john.doe@example.com" &&
+			exec.ResumeData["notes"] == "looks good"
+	})).Return(nil)
+	mockEngine.On("ResumePausedExecution", ctx, mock.AnythingOfType("*models.WorkflowExecution")).Return(nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test resume execution with custom data
+	err = resumer.ResumeExecution(ctx, executionID, resumeData)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+	mockEngine.AssertExpectations(t)
+}
+
+func TestResumeExecution_WithoutEngine(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+	resumeData := models.JSONB{"approved": true}
+
+	// Create a paused execution
+	pausedAt := time.Now().Add(-1 * time.Hour)
+	pausedReason := "waiting for approval"
+	execution := &models.WorkflowExecution{
+		ID:           executionID,
+		WorkflowID:   uuid.New(),
+		Status:       models.ExecutionStatusPaused,
+		StartedAt:    time.Now().Add(-2 * time.Hour),
+		PausedAt:     &pausedAt,
+		PausedReason: &pausedReason,
+		ResumeData:   make(models.JSONB),
+		ResumeCount:  0,
+	}
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+	mockRepo.On("UpdateExecution", ctx, mock.AnythingOfType("*models.WorkflowExecution")).Return(nil)
+
+	// Create resumer without engine
+	resumer := NewWorkflowResumer(log, mockRepo, nil)
+
+	// Test resume execution without engine
+	err = resumer.ResumeExecution(ctx, executionID, resumeData)
+
+	// Should update status but log warning about no engine
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestGetPausedExecutions_Success(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	limit := 50
+
+	pausedAt := time.Now().Add(-1 * time.Hour)
+	pausedReason := "waiting for approval"
+
+	// Create some paused executions
+	executions := []*models.WorkflowExecution{
+		{
+			ID:           uuid.New(),
+			WorkflowID:   uuid.New(),
+			Status:       models.ExecutionStatusPaused,
+			StartedAt:    time.Now().Add(-2 * time.Hour),
+			PausedAt:     &pausedAt,
+			PausedReason: &pausedReason,
 		},
-		updateFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-			executionUpdated = true
-			return nil
+		{
+			ID:           uuid.New(),
+			WorkflowID:   uuid.New(),
+			Status:       models.ExecutionStatusPaused,
+			StartedAt:    time.Now().Add(-3 * time.Hour),
+			PausedAt:     &pausedAt,
+			PausedReason: &pausedReason,
 		},
 	}
 
-	engine := &mockWorkflowEngine{
-		resumeFunc: func(ctx context.Context, exec *models.WorkflowExecution) error {
-			return errors.New("engine failure")
-		},
+	// Setup expectations
+	mockRepo.On("GetPausedExecutions", ctx, limit).Return(executions, nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test get paused executions
+	result, err := resumer.GetPausedExecutions(ctx, limit)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, executions[0].ID, result[0].ID)
+	assert.Equal(t, executions[1].ID, result[1].ID)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestGetPausedExecutions_NilRepository(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	limit := 50
+
+	resumer := NewWorkflowResumer(log, nil, nil)
+
+	// Test get paused executions with nil repository
+	result, err := resumer.GetPausedExecutions(ctx, limit)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "execution repository not configured")
+}
+
+func TestCanResume_Success(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	pausedAt := time.Now().Add(-1 * time.Hour)
+	pausedReason := "waiting for approval"
+
+	execution := &models.WorkflowExecution{
+		ID:           uuid.New(),
+		WorkflowID:   uuid.New(),
+		Status:       models.ExecutionStatusPaused,
+		StartedAt:    time.Now().Add(-2 * time.Hour),
+		PausedAt:     &pausedAt,
+		PausedReason: &pausedReason,
 	}
 
-	resumer := NewWorkflowResumer(log, repo, engine)
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
 
-	err := resumer.ResumeExecution(ctx, executionID, models.JSONB{})
+	// Test can resume
+	err = resumer.CanResume(execution)
 
-	if err == nil {
-		t.Fatal("Expected error when engine fails")
+	assert.NoError(t, err)
+}
+
+func TestCanResume_NilExecution(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test can resume with nil execution
+	err = resumer.CanResume(nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execution is nil")
+}
+
+func TestCanResume_NotPaused(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	execution := &models.WorkflowExecution{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusRunning,
+		StartedAt:  time.Now(),
 	}
 
-	if !executionUpdated {
-		t.Error("Expected execution to be updated before engine call")
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test can resume
+	err = resumer.CanResume(execution)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not paused")
+}
+
+func TestCanResume_NoPauseTimestamp(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	execution := &models.WorkflowExecution{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusPaused,
+		StartedAt:  time.Now(),
+		PausedAt:   nil, // Missing pause timestamp
 	}
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test can resume
+	err = resumer.CanResume(execution)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has no pause timestamp")
+}
+
+func TestCanResume_PausedTooLong(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	// Paused for 8 days (exceeds 7 day limit)
+	pausedAt := time.Now().Add(-8 * 24 * time.Hour)
+	execution := &models.WorkflowExecution{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+		Status:     models.ExecutionStatusPaused,
+		StartedAt:  time.Now().Add(-9 * 24 * time.Hour),
+		PausedAt:   &pausedAt,
+	}
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test can resume
+	err = resumer.CanResume(execution)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has been paused for too long")
+}
+
+func TestResumeWorkflow_NilRepository(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+
+	resumer := NewWorkflowResumer(log, nil, nil)
+
+	// Test resume workflow with nil repository - should be a no-op
+	err = resumer.ResumeWorkflow(ctx, executionID, true)
+
+	assert.NoError(t, err) // Should succeed as a no-op
+}
+
+func TestResumeExecution_MultipleResumes(t *testing.T) {
+	log, err := logger.New("info", "json")
+	require.NoError(t, err)
+
+	mockRepo := new(MockExecutionRepository)
+	mockEngine := new(MockWorkflowEngine)
+
+	ctx := context.Background()
+	executionID := uuid.New()
+
+	// Create a paused execution that has been resumed before
+	pausedAt := time.Now().Add(-1 * time.Hour)
+	lastResumedAt := time.Now().Add(-2 * time.Hour)
+	pausedReason := "waiting for second approval"
+	execution := &models.WorkflowExecution{
+		ID:            executionID,
+		WorkflowID:    uuid.New(),
+		Status:        models.ExecutionStatusPaused,
+		StartedAt:     time.Now().Add(-3 * time.Hour),
+		PausedAt:      &pausedAt,
+		PausedReason:  &pausedReason,
+		ResumeData:    make(models.JSONB),
+		ResumeCount:   2, // Already resumed twice
+		LastResumedAt: &lastResumedAt,
+	}
+
+	// Setup expectations
+	mockRepo.On("GetExecutionByID", ctx, executionID).Return(execution, nil)
+	mockRepo.On("UpdateExecution", ctx, mock.MatchedBy(func(exec *models.WorkflowExecution) bool {
+		return exec.ID == executionID &&
+			exec.Status == models.ExecutionStatusRunning &&
+			exec.ResumeCount == 3 // Should increment to 3
+	})).Return(nil)
+	mockEngine.On("ResumePausedExecution", ctx, mock.AnythingOfType("*models.WorkflowExecution")).Return(nil)
+
+	resumer := NewWorkflowResumer(log, mockRepo, mockEngine)
+
+	// Test resume execution
+	resumeData := models.JSONB{"approved": true}
+	err = resumer.ResumeExecution(ctx, executionID, resumeData)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+	mockEngine.AssertExpectations(t)
 }

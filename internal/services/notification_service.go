@@ -25,11 +25,11 @@ const (
 
 // NotificationService handles sending notifications via various channels
 type NotificationService struct {
-	config       *config.NotificationConfig
-	logger       *logger.Logger
-	emailClient  *EmailClient
-	slackClient  *SlackClient
-	templates    *NotificationTemplates
+	config      *config.NotificationConfig
+	logger      *logger.Logger
+	emailClient *EmailClient
+	slackClient *SlackClient
+	templates   *NotificationTemplates
 }
 
 // EmailClient handles email sending

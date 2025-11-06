@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 )
 
 // ApprovalRepository defines the interface for approval persistence
@@ -27,10 +27,10 @@ type WorkflowResumer interface {
 
 // ApprovalService handles approval workflow logic
 type ApprovalService struct {
-	approvalRepo       ApprovalRepository
-	logger             *logger.Logger
-	notificationSvc    *NotificationService
-	workflowResumer    WorkflowResumer
+	approvalRepo         ApprovalRepository
+	logger               *logger.Logger
+	notificationSvc      *NotificationService
+	workflowResumer      WorkflowResumer
 	defaultApproverEmail string
 }
 

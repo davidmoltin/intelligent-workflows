@@ -102,9 +102,9 @@ func createInventoryTemplate(name string) *models.Workflow {
 					Type: "execute",
 					Execute: []models.ExecuteAction{
 						{
-							Type:       "webhook",
-							URL:        "https://api.example.com/notify",
-							Method:     "POST",
+							Type:   "webhook",
+							URL:    "https://api.example.com/notify",
+							Method: "POST",
 							Body: map[string]interface{}{
 								"product_id": "{{.context.product_id}}",
 								"quantity":   "{{.context.current_quantity}}",

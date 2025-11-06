@@ -28,6 +28,7 @@ type WorkflowDefinition struct {
 	Trigger TriggerDefinition `json:"trigger"`
 	Context ContextDefinition `json:"context,omitempty"`
 	Steps   []Step            `json:"steps"`
+	Timeout string            `json:"timeout,omitempty"` // Global timeout duration, e.g., "5m", "1h", "30s"
 }
 
 // TriggerDefinition defines what starts the workflow
@@ -55,6 +56,7 @@ type Step struct {
 	Execute   []ExecuteAction        `json:"execute,omitempty"`
 	Wait      *WaitConfig            `json:"wait,omitempty"`
 	Retry     *RetryConfig           `json:"retry,omitempty"`
+	Timeout   string                 `json:"timeout,omitempty"` // Step-level timeout, e.g., "30s", "2m"
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 

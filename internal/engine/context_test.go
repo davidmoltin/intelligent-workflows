@@ -17,8 +17,8 @@ func TestBuildContext(t *testing.T) {
 
 	t.Run("builds context from trigger payload", func(t *testing.T) {
 		triggerPayload := map[string]interface{}{
-			"order_id": "ord-123",
-			"total":    1500.0,
+			"order_id":    "ord-123",
+			"total":       1500.0,
 			"customer_id": "cust-456",
 		}
 

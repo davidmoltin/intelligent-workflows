@@ -14,11 +14,11 @@ import (
 
 // Mock ExecutionRepository
 type mockExecutionRepo struct {
-	createExecutionFunc      func(ctx context.Context, execution *models.WorkflowExecution) error
-	updateExecutionFunc      func(ctx context.Context, execution *models.WorkflowExecution) error
-	getExecutionByIDFunc     func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	createStepExecutionFunc  func(ctx context.Context, step *models.StepExecution) error
-	updateStepExecutionFunc  func(ctx context.Context, step *models.StepExecution) error
+	createExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
+	updateExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
+	getExecutionByIDFunc    func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
+	createStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
+	updateStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
 }
 
 func (m *mockExecutionRepo) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {

@@ -69,6 +69,7 @@ func run() error {
 	// Initialize repositories
 	workflowRepo := postgres.NewWorkflowRepository(db.DB)
 	executionRepo := postgres.NewExecutionRepository(db.DB)
+	analyticsRepo := postgres.NewAnalyticsRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
 	userRepo := postgres.NewUserRepository(db.DB)
@@ -158,11 +159,16 @@ func run() error {
 	resumerWorker := workers.NewWorkflowResumerWorker(workflowResumer, log, 1*time.Minute)
 	resumerWorker.Start(workerCtx)
 
+	// Initialize and start timeout enforcer worker
+	timeoutEnforcerWorker := workers.NewTimeoutEnforcerWorker(executionRepo, log, 1*time.Minute)
+	timeoutEnforcerWorker.Start(workerCtx)
+
 	// Initialize handlers
 	h := handlers.NewHandlers(
 		log,
 		workflowRepo,
 		executionRepo,
+		analyticsRepo,
 		eventRouter,
 		approvalService,
 		authService,
