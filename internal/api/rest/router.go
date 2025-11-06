@@ -196,6 +196,32 @@ func (r *Router) SetupRoutes() {
 					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/actor/{actor_id}", r.handlers.Audit.GetActorAuditLogs)
 				})
 			}
+
+			// Organizations
+			router.Route("/organizations", func(router chi.Router) {
+				// List user's organizations and create
+				router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/", r.handlers.Organization.List)
+				router.With(customMiddleware.RequirePermission("organization:create", r.logger)).Post("/", r.handlers.Organization.Create)
+
+				// Get by slug
+				router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/slug/{slug}", r.handlers.Organization.GetBySlug)
+
+				// Operations on specific organizations
+				router.Route("/{id}", func(router chi.Router) {
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/", r.handlers.Organization.Get)
+					router.With(customMiddleware.RequirePermission("organization:update", r.logger)).Put("/", r.handlers.Organization.Update)
+					router.With(customMiddleware.RequirePermission("organization:delete", r.logger)).Delete("/", r.handlers.Organization.Delete)
+
+					// User management within organization
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/users", r.handlers.Organization.ListUsers)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Post("/users", r.handlers.Organization.AddUser)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Delete("/users/{user_id}", r.handlers.Organization.RemoveUser)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Put("/users/{user_id}/role", r.handlers.Organization.UpdateUserRole)
+
+					// Access check
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/access", r.handlers.Organization.CheckUserAccess)
+				})
+			})
 		})
 
 		// AI endpoints (only if AI service is configured)

@@ -185,6 +185,7 @@ func run() error {
 		workflowRepo,
 		executionRepo,
 		analyticsRepo,
+		organizationRepo,
 		eventRouter,
 		approvalService,
 		authService,
