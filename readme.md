@@ -1,234 +1,145 @@
-# Intelligent Workflows for E-commerce
+# Intelligent Workflows
 
-A state-of-the-art, API-first workflow orchestration platform designed for e-commerce microservices. Built to be both human-friendly and AI-agent-ready, removing the complexity typically found in traditional workflow platforms.
+An event-driven workflow automation system with built-in approval mechanisms and comprehensive API.
 
-## 🎯 Overview
+## Features
 
-Intelligent Workflows allows you to:
-- **Control actions** across multiple microservices (orders, quotes, products, carts, etc.)
-- **Allow or block** operations based on sophisticated business rules
-- **Automate processes** with visual workflows or code-based definitions
-- **Integrate AI agents** to dynamically create and manage workflows
-- **Simplify complexity** with an intuitive React UI for non-technical users
+- 🔄 **Event-Driven Workflows** - Trigger workflows automatically based on events
+- ✅ **Approval Management** - Built-in approval workflows with role-based routing
+- 🔐 **Secure Authentication** - JWT and API Key authentication with RBAC
+- 📊 **Execution Tracking** - Monitor and trace workflow executions in real-time
+- 🚀 **REST API** - Comprehensive RESTful API with OpenAPI specification
+- 📚 **Interactive Documentation** - Built-in Swagger UI for API exploration
+- ⚡ **High Performance** - Built with Go for speed and efficiency
+- 🔒 **Production Ready** - Rate limiting, monitoring, and security best practices
 
-## ✨ Key Features
-
-### 🤖 AI-Native Design
-- Natural language workflow creation
-- AI agents can read, create, and execute workflows
-- Structured API for programmatic workflow management
-- Real-time execution monitoring for agents
-
-### 🚀 Developer-First
-- **API-First**: Every feature accessible via REST API
-- **Code as Configuration**: Define workflows in JSON/YAML
-- **Type-Safe**: Go with PostgreSQL for robust, scalable backend
-- **CLI Tool**: Manage workflows from the command line
-- **Version Control**: Workflows are code - commit, diff, review
-
-### 👤 User-Friendly
-- **Visual Workflow Builder**: Drag-and-drop interface
-- **Pre-built Templates**: Start with proven workflow patterns
-- **No-Code Conditions**: Build rules without coding
-- **Real-Time Monitoring**: Watch workflows execute live
-- **Approval Dashboard**: Manage pending approvals easily
-
-### 🏗️ Enterprise-Grade
-- **Scalable**: Handle thousands of workflows concurrently
-- **Reliable**: ACID transactions, automatic retries
-- **Observable**: Built-in monitoring, tracing, and audit logs
-- **Secure**: Role-based access control, encrypted secrets
-- **Performant**: Sub-second execution for most workflows
-
-## 🏛️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              React UI • AI Agents • CLI                      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-┌─────────────────────────────────────────────────────────────┐
-│              REST API • WebSockets                           │
-└─────────────────────────────────────────────────────────────┘
-                            │
-┌─────────────────────────────────────────────────────────────┐
-│    Workflow Engine • Rule Evaluator • Action Executor        │
-└─────────────────────────────────────────────────────────────┘
-                            │
-┌─────────────────────────────────────────────────────────────┐
-│         PostgreSQL • Redis • (Optional: MongoDB)             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Technology Stack:**
-- **Backend**: Go 1.21+, Chi/Fiber, PostgreSQL 15+, Redis 7+
-- **Frontend**: Vite, React 18+, TypeScript, Tailwind CSS, shadcn/ui
-- **Deployment**: Docker, Kubernetes
-- **Monitoring**: Prometheus, Grafana, Jaeger
-
-## 📖 Documentation
-
-- **[Architecture](./ARCHITECTURE.md)** - Comprehensive system design and technical decisions
-- **[Getting Started](./GETTING_STARTED.md)** - Set up your development environment
-- **[Implementation Roadmap](./IMPLEMENTATION_ROADMAP.md)** - 16-week plan to MVP
-- **[Database Decision](./DATABASE_DECISION.md)** - PostgreSQL vs MongoDB analysis
-- **[AI Agent Examples](./examples/ai-agent-examples.md)** - How AI agents interact with the system
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.24.7 or higher
 - PostgreSQL 15+
 - Redis 7+
-- Node.js 18+ (for UI)
-- Docker (recommended)
+- Docker and Docker Compose (optional)
 
-### Using Docker (Fastest)
+### Installation
 
+1. Clone the repository:
 ```bash
-# Clone the repository
-git clone https://github.com/yourorg/intelligent-workflows.git
+git clone https://github.com/davidmoltin/intelligent-workflows.git
 cd intelligent-workflows
-
-# Start all services
-docker-compose up -d
-
-# Run migrations
-make migrate-up
-
-# Verify
-curl http://localhost:8080/health
 ```
 
-### Manual Setup
-
+2. Install dependencies:
 ```bash
-# Install dependencies
 go mod download
+```
 
-# Set up database
-createdb workflows
-migrate -database "postgresql://localhost/workflows?sslmode=disable" \
-        -path migrations/postgres up
+3. Start dependencies (PostgreSQL and Redis):
+```bash
+docker-compose up -d postgres redis
+```
 
-# Start Redis
-redis-server
+4. Run database migrations:
+```bash
+./bin/migrate up
+```
 
-# Run the API server
+5. Start the API server:
+```bash
 go run cmd/api/main.go
 ```
 
-See [Getting Started](./GETTING_STARTED.md) for detailed instructions.
+The API will be available at `http://localhost:8080`.
 
-## 💡 Example Workflow
+## API Documentation
 
-Here's a simple workflow that requires approval for high-value orders:
+Comprehensive API documentation is available:
 
-```json
-{
-  "workflow_id": "high_value_order_approval",
-  "version": "1.0.0",
-  "name": "High Value Order Approval",
-  "trigger": {
-    "type": "event",
-    "event": "order.checkout.initiated"
-  },
-  "steps": [
-    {
-      "id": "check_order_value",
-      "type": "condition",
-      "condition": {
-        "field": "order.total",
-        "operator": "gte",
-        "value": 10000
-      },
-      "on_true": "require_approval",
-      "on_false": "allow_order"
-    },
-    {
-      "id": "require_approval",
-      "type": "action",
-      "action": "block",
-      "reason": "Order requires approval for amounts over $10,000",
-      "execute": [
-        {
-          "type": "notify",
-          "channel": "email",
-          "recipients": ["role:sales_manager"],
-          "template": "order_approval_required"
-        }
-      ]
-    },
-    {
-      "id": "allow_order",
-      "type": "action",
-      "action": "allow"
-    }
-  ]
-}
-```
+- **[Interactive API Docs (Swagger UI)](http://localhost:8080/api/v1/docs/ui)** - Try the API in your browser
+- **[OpenAPI Specification](http://localhost:8080/api/v1/docs/openapi.yaml)** - Complete API spec
+- **[Authentication Guide](./docs/api/AUTHENTICATION.md)** - JWT and API Key authentication
+- **[API Examples](./docs/api/EXAMPLES.md)** - Practical examples with curl commands
+- **[API Documentation Overview](./docs/api/README.md)** - Complete documentation index
 
-### Deploy and Test
+### Quick API Example
 
 ```bash
-# Deploy workflow
-curl -X POST http://localhost:8080/api/v1/workflows \
-  -H "Content-Type: application/json" \
-  -d @high-value-order-approval.json
-
-# Trigger with an event
-curl -X POST http://localhost:8080/api/v1/events \
+# Register a new user
+curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "event_type": "order.checkout.initiated",
-    "payload": {"order": {"id": "ord_123", "total": 15000}}
+    "username": "demo",
+    "email": "demo@example.com",
+    "password": "SecurePass123!"
   }'
 
-# View execution
-curl http://localhost:8080/api/v1/executions
+# Login to get access token
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo",
+    "password": "SecurePass123!"
+  }'
+
+# Create a workflow (use the access_token from login response)
+curl -X POST http://localhost:8080/api/v1/workflows \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "order_approval",
+    "version": "1.0.0",
+    "name": "Order Approval Workflow",
+    "definition": {
+      "trigger": {
+        "type": "event",
+        "event": "order.created"
+      },
+      "steps": [...]
+    }
+  }'
 ```
 
-More examples in [examples/workflows/](./examples/workflows/)
+## Architecture
 
-## 🤖 AI Agent Integration
+The system consists of several key components:
 
-AI agents can create workflows using natural language:
+- **REST API** - HTTP API for workflow management and event emission
+- **Workflow Engine** - Event-driven workflow execution engine
+- **Approval Service** - Manages approval requests and decisions
+- **Authentication Service** - JWT and API Key authentication with RBAC
+- **Event Router** - Routes events to matching workflows
+- **Execution Tracker** - Tracks and stores workflow execution history
 
-```json
-POST /api/v1/ai/interpret
-{
-  "prompt": "Block all orders over $5000 from customers who signed up in the last 30 days"
-}
-```
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture documentation.
 
-The service responds with a suggested workflow definition that the agent can review and deploy.
-
-See [AI Agent Examples](./examples/ai-agent-examples.md) for comprehensive integration patterns.
-
-## 🛠️ Development
-
-### Project Structure
+## Project Structure
 
 ```
 intelligent-workflows/
 ├── cmd/                    # Application entry points
-│   ├── api/               # API server
-│   ├── worker/            # Background worker
-│   └── cli/               # CLI tool
+│   ├── api/               # REST API server
+│   └── migrate/           # Database migration tool
 ├── internal/              # Private application code
-│   ├── api/              # API handlers and routes
-│   ├── engine/           # Workflow execution engine
-│   ├── models/           # Data models
+│   ├── api/              # API handlers and middleware
+│   ├── engine/           # Workflow engine
+│   ├── models/           # Domain models
 │   ├── repository/       # Data access layer
 │   └── services/         # Business logic
-├── pkg/                  # Public libraries
-├── migrations/           # Database migrations
-├── web/                  # React frontend
-├── examples/             # Example workflows
-├── docs/                 # Documentation
-└── tests/               # Integration tests
+├── pkg/                   # Public libraries
+│   ├── auth/             # Authentication utilities
+│   └── logger/           # Logging utilities
+├── docs/                  # Documentation
+│   └── api/              # API documentation
+│       ├── README.md     # API docs overview
+│       ├── openapi.yaml  # OpenAPI 3.0 specification
+│       ├── AUTHENTICATION.md
+│       └── EXAMPLES.md
+├── migrations/            # Database migrations
+└── docker-compose.yml     # Docker services
 ```
+
+## Development
 
 ### Running Tests
 
@@ -236,105 +147,168 @@ intelligent-workflows/
 # Run all tests
 go test ./...
 
-# Run with coverage
+# Run tests with coverage
 go test -cover ./...
 
 # Run integration tests
-go test -tags=integration ./tests/...
+go test -tags=integration ./...
 ```
 
-### Contributing
+### Building
 
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+```bash
+# Build the API server
+go build -o bin/api ./cmd/api
 
-## 📊 Use Cases
+# Build with Docker
+docker build -t intelligent-workflows:latest .
+```
 
-### E-commerce Operations
-- **Order Approval**: Require approval for high-value or risky orders
-- **Fraud Detection**: Block suspicious transactions automatically
-- **Inventory Management**: Sync inventory across warehouses, prevent overselling
-- **Pricing Rules**: Dynamic pricing based on customer tier, quantity, time
-- **Quote Management**: Automate quote lifecycle with reminders and expiration
+### Code Quality
 
-### Customer Experience
-- **Cart Abandonment**: Send recovery emails with discount codes
-- **Order Updates**: Notify customers at each order stage
-- **Personalization**: Trigger personalized recommendations
-- **Loyalty Programs**: Automate tier upgrades and rewards
+```bash
+# Run linter
+golangci-lint run
 
-### Compliance & Risk
-- **Audit Logging**: Track all decisions and actions
-- **Approval Chains**: Multi-level approvals for sensitive operations
-- **Data Retention**: Automatically archive old data
-- **Regulatory Compliance**: Enforce business rules consistently
+# Format code
+go fmt ./...
 
-## 🎯 Roadmap
+# Run security checks
+gosec ./...
+```
 
-### Phase 1: MVP (Weeks 1-8) ✅ Planning Complete
-- Core workflow engine
-- CRUD API
-- Event routing
-- Basic UI
+## Configuration
 
-### Phase 2: Advanced Features (Weeks 9-13)
-- Parallel execution
-- Approval workflows
-- AI integration
-- Visual workflow builder
+Configuration can be provided via environment variables or a configuration file:
 
-### Phase 3: Production Ready (Weeks 14-16)
-- Performance optimization
-- Security hardening
-- Monitoring & alerting
-- Deployment automation
+```bash
+# Database
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=postgres
+export DB_PASSWORD=password
+export DB_NAME=intelligent_workflows
 
-### Phase 4: Enhanced Features (Post-MVP)
-- Workflow versioning and rollback
-- A/B testing for workflows
-- Advanced analytics and insights
-- Workflow marketplace
-- Mobile app
+# Redis
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
 
-See [Implementation Roadmap](./IMPLEMENTATION_ROADMAP.md) for details.
+# JWT
+export JWT_SECRET=your-secret-key
+export JWT_EXPIRATION=15m
 
-## 🤝 Support
+# API
+export API_PORT=8080
+export API_HOST=0.0.0.0
+```
 
-- **Documentation**: [docs/](./docs/)
-- **Examples**: [examples/](./examples/)
-- **Issues**: [GitHub Issues](https://github.com/yourorg/intelligent-workflows/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourorg/intelligent-workflows/discussions)
-- **Enterprise Support**: support@yourcompany.com
+See [GETTING_STARTED.md](./GETTING_STARTED.md) for detailed configuration options.
 
-## 📜 License
+## Deployment
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+### Docker
 
-## 🙏 Acknowledgments
+```bash
+# Build and start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Stop services
+docker-compose down
+```
+
+### Kubernetes
+
+```bash
+# Apply Kubernetes manifests
+kubectl apply -f k8s/
+
+# Check deployment status
+kubectl get pods -n intelligent-workflows
+
+# View logs
+kubectl logs -f deployment/intelligent-workflows-api -n intelligent-workflows
+```
+
+See [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) for detailed deployment documentation.
+
+## Monitoring
+
+The system includes built-in monitoring with:
+
+- **Prometheus** - Metrics collection
+- **Grafana** - Visualization dashboards
+- **Jaeger** - Distributed tracing
+- **Structured Logging** - JSON-formatted logs with correlation IDs
+
+Access monitoring dashboards:
+- Grafana: http://localhost:3000
+- Prometheus: http://localhost:9090
+- Jaeger: http://localhost:16686
+
+## Security
+
+Security features include:
+
+- 🔐 JWT authentication with 15-minute expiration
+- 🔑 API Key authentication for service-to-service
+- 🛡️ Bcrypt password hashing (cost factor 12)
+- 🚦 Rate limiting (100 req/min per user)
+- 🎭 Role-based access control (RBAC)
+- 🔒 Permission-based authorization
+- 📝 Audit logging for authentication events
+- 🔄 Token rotation on refresh
+
+See [AUTHENTICATION.md](./docs/api/AUTHENTICATION.md) for security best practices.
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure:
+- All tests pass
+- Code is formatted with `go fmt`
+- Linter passes without errors
+- Documentation is updated
+
+## Documentation
+
+- [Getting Started](./GETTING_STARTED.md) - Setup and basic usage
+- [Architecture](./ARCHITECTURE.md) - System design and components
+- [API Documentation](./docs/api/README.md) - Complete API reference
+- [Testing Guide](./TESTING.md) - Testing strategy and guidelines
+- [Infrastructure](./INFRASTRUCTURE.md) - Deployment and operations
+- [Implementation Roadmap](./IMPLEMENTATION_ROADMAP.md) - Development timeline
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/davidmoltin/intelligent-workflows/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/davidmoltin/intelligent-workflows/discussions)
+- **Documentation**: [docs/api/](./docs/api/)
+
+## Acknowledgments
 
 Built with:
-- [Go](https://golang.org/)
-- [PostgreSQL](https://www.postgresql.org/)
-- [Redis](https://redis.io/)
-- [React](https://react.dev/)
-- [Chi Router](https://github.com/go-chi/chi)
-- [sqlc](https://sqlc.dev/)
-
-## 🌟 Why Intelligent Workflows?
-
-Traditional workflow platforms are often:
-- ❌ Complex to learn and use
-- ❌ Require expensive enterprise licenses
-- ❌ Not designed for AI agent interaction
-- ❌ Vendor lock-in with proprietary formats
-- ❌ Difficult to version control and test
-
-Intelligent Workflows is:
-- ✅ Simple JSON/YAML definitions
-- ✅ Open-source and extensible
-- ✅ AI-native from day one
-- ✅ Git-friendly (workflows as code)
-- ✅ Easy to test and debug
+- [Go](https://golang.org/) - Programming language
+- [Chi](https://github.com/go-chi/chi) - HTTP router
+- [PostgreSQL](https://www.postgresql.org/) - Database
+- [Redis](https://redis.io/) - Caching and sessions
+- [JWT](https://jwt.io/) - Authentication tokens
+- [OpenAPI](https://www.openapis.org/) - API specification
+- [Swagger UI](https://swagger.io/tools/swagger-ui/) - API documentation
 
 ---
 
-**Ready to get started?** Check out the [Getting Started Guide](./GETTING_STARTED.md)
+Made with ❤️ by the Intelligent Workflows team
