@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -51,7 +52,14 @@ func (h *WorkflowHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflow, err := h.repo.Create(r.Context(), &req, nil)
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
+	workflow, err := h.repo.Create(r.Context(), organizationID, &req, nil)
 	if err != nil {
 		h.logger.Errorf("Failed to create workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to create workflow")
@@ -83,7 +91,14 @@ func (h *WorkflowHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflow, err := h.repo.GetByID(r.Context(), id)
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
+	workflow, err := h.repo.GetByID(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get workflow", logger.Err(err))
 		h.respondError(w, http.StatusNotFound, "Workflow not found")
@@ -95,6 +110,13 @@ func (h *WorkflowHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // List retrieves a list of workflows
 func (h *WorkflowHandler) List(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	// Parse query parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
@@ -121,7 +143,7 @@ func (h *WorkflowHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	workflows, total, err := h.repo.List(r.Context(), enabled, limit, offset)
+	workflows, total, err := h.repo.List(r.Context(), organizationID, enabled, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list workflows", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to list workflows")
@@ -148,6 +170,13 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	var req models.UpdateWorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -160,7 +189,7 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflow, err := h.repo.Update(r.Context(), id, &req)
+	workflow, err := h.repo.Update(r.Context(), organizationID, id, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to update workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to update workflow")
@@ -197,7 +226,14 @@ func (h *WorkflowHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Delete(r.Context(), id); err != nil {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
+	if err := h.repo.Delete(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to delete workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to delete workflow")
 		return
@@ -223,7 +259,14 @@ func (h *WorkflowHandler) Enable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.SetEnabled(r.Context(), id, true); err != nil {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
+	if err := h.repo.SetEnabled(r.Context(), organizationID, id, true); err != nil {
 		h.logger.Errorf("Failed to enable workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to enable workflow")
 		return
@@ -241,7 +284,14 @@ func (h *WorkflowHandler) Disable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.SetEnabled(r.Context(), id, false); err != nil {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
+	if err := h.repo.SetEnabled(r.Context(), organizationID, id, false); err != nil {
 		h.logger.Errorf("Failed to disable workflow", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to disable workflow")
 		return

@@ -289,35 +289,35 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *m
 }
 
 // ValidateAPIKey validates an API key and returns the associated user
-func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (*models.User, []string, error) {
+func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (*models.User, uuid.UUID, []string, error) {
 	// Hash the API key
 	keyHash := auth.HashAPIKey(apiKeyString)
 
 	// Get API key from database
 	apiKey, err := s.apiKeyRepo.GetByHash(ctx, keyHash)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid API key")
+		return nil, uuid.Nil, nil, fmt.Errorf("invalid API key")
 	}
 
 	// Check if API key is active
 	if !apiKey.IsActive {
-		return nil, nil, fmt.Errorf("API key is disabled")
+		return nil, uuid.Nil, nil, fmt.Errorf("API key is disabled")
 	}
 
 	// Check if API key is expired
 	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-		return nil, nil, fmt.Errorf("API key expired")
+		return nil, uuid.Nil, nil, fmt.Errorf("API key expired")
 	}
 
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("user not found")
+		return nil, uuid.Nil, nil, fmt.Errorf("user not found")
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		return nil, nil, fmt.Errorf("user account is disabled")
+		return nil, uuid.Nil, nil, fmt.Errorf("user account is disabled")
 	}
 
 	// Update last used timestamp
@@ -325,7 +325,7 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (
 		s.logger.Warn("Failed to update API key last used", zap.Error(err))
 	}
 
-	return user, apiKey.Scopes, nil
+	return user, apiKey.OrganizationID, apiKey.Scopes, nil
 }
 
 // RevokeAPIKey revokes an API key
