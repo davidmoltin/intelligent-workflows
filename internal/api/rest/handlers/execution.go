@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
@@ -32,6 +33,13 @@ func NewExecutionHandler(log *logger.Logger, executionRepo *postgres.ExecutionRe
 
 // ListExecutions handles GET /api/v1/executions
 func (h *ExecutionHandler) ListExecutions(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	workflowIDStr := r.URL.Query().Get("workflow_id")
 	statusStr := r.URL.Query().Get("status")
@@ -72,7 +80,7 @@ func (h *ExecutionHandler) ListExecutions(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get executions
-	executions, total, err := h.executionRepo.ListExecutions(r.Context(), workflowID, status, limit, offset)
+	executions, total, err := h.executionRepo.ListExecutions(r.Context(), organizationID, workflowID, status, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list executions: %v", err)
 		http.Error(w, "Failed to retrieve executions", http.StatusInternalServerError)
@@ -95,6 +103,13 @@ func (h *ExecutionHandler) ListExecutions(w http.ResponseWriter, r *http.Request
 
 // GetExecution handles GET /api/v1/executions/:id
 func (h *ExecutionHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -103,7 +118,7 @@ func (h *ExecutionHandler) GetExecution(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	execution, err := h.executionRepo.GetExecutionByID(r.Context(), id)
+	execution, err := h.executionRepo.GetExecutionByID(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution: %v", err)
 		http.Error(w, "Execution not found", http.StatusNotFound)
@@ -116,6 +131,13 @@ func (h *ExecutionHandler) GetExecution(w http.ResponseWriter, r *http.Request) 
 
 // GetExecutionTrace handles GET /api/v1/executions/:id/trace
 func (h *ExecutionHandler) GetExecutionTrace(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -124,7 +146,7 @@ func (h *ExecutionHandler) GetExecutionTrace(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	trace, err := h.executionRepo.GetExecutionTrace(r.Context(), id)
+	trace, err := h.executionRepo.GetExecutionTrace(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution trace: %v", err)
 		http.Error(w, "Execution not found", http.StatusNotFound)
@@ -137,6 +159,13 @@ func (h *ExecutionHandler) GetExecutionTrace(w http.ResponseWriter, r *http.Requ
 
 // PauseExecution handles POST /api/v1/executions/:id/pause
 func (h *ExecutionHandler) PauseExecution(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -166,7 +195,7 @@ func (h *ExecutionHandler) PauseExecution(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get updated execution
-	execution, err := h.executionRepo.GetExecutionByID(r.Context(), id)
+	execution, err := h.executionRepo.GetExecutionByID(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution after pause: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Execution paused but failed to retrieve updated state")
@@ -180,6 +209,13 @@ func (h *ExecutionHandler) PauseExecution(w http.ResponseWriter, r *http.Request
 
 // ResumeExecution handles POST /api/v1/executions/:id/resume
 func (h *ExecutionHandler) ResumeExecution(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -214,7 +250,7 @@ func (h *ExecutionHandler) ResumeExecution(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Get updated execution
-	execution, err := h.executionRepo.GetExecutionByID(r.Context(), id)
+	execution, err := h.executionRepo.GetExecutionByID(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get execution after resume: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Execution resumed but failed to retrieve updated state")
@@ -228,6 +264,13 @@ func (h *ExecutionHandler) ResumeExecution(w http.ResponseWriter, r *http.Reques
 
 // ListPausedExecutions handles GET /api/v1/executions/paused
 func (h *ExecutionHandler) ListPausedExecutions(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	// Parse limit parameter
 	limitStr := r.URL.Query().Get("limit")
 	limit := 50
@@ -237,8 +280,8 @@ func (h *ExecutionHandler) ListPausedExecutions(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// Get paused executions
-	executions, err := h.workflowResumer.GetPausedExecutions(r.Context(), limit)
+	// Get paused executions for this organization
+	executions, err := h.executionRepo.GetPausedExecutions(r.Context(), organizationID, limit)
 	if err != nil {
 		h.logger.Errorf("Failed to list paused executions: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to retrieve paused executions")

@@ -1,6 +1,7 @@
 .PHONY: help build run test test-unit test-integration test-e2e test-all test-load clean \
         docker-up docker-down docker-build docker-logs docker-restart docker-stop docker-rebuild docker-clean \
         migrate-up migrate-down mocks \
+        seed-rbac seed-rbac-users seed-verify seed-stats \
         monitoring-up monitoring-down monitoring-logs \
         k8s-validate k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-delete k8s-status k8s-logs \
         health ready db-shell db-console db-backup db-restore redis-cli \
@@ -81,6 +82,22 @@ migrate-up: ## Run database migrations up
 migrate-down: ## Run database migrations down
 	@echo "Rolling back migrations..."
 	@docker-compose exec -T postgres psql -U postgres -d workflows -f /docker-entrypoint-initdb.d/001_initial_schema.down.sql
+
+seed-rbac: ## Seed RBAC permissions and roles
+	@echo "Seeding RBAC data..."
+	@go run ./cmd/seed
+
+seed-rbac-users: ## Seed RBAC permissions, roles, and default admin user
+	@echo "Seeding RBAC data with default users..."
+	@go run ./cmd/seed --users
+
+seed-verify: ## Verify RBAC seed data integrity
+	@echo "Verifying RBAC data..."
+	@go run ./cmd/seed --verify
+
+seed-stats: ## Show RBAC statistics
+	@echo "Fetching RBAC statistics..."
+	@go run ./cmd/seed --stats
 
 db-shell: ## Open PostgreSQL shell
 	@docker-compose exec postgres psql -U postgres -d workflows

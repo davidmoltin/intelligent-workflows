@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/validator"
@@ -16,13 +17,13 @@ import (
 
 // ScheduleService defines the interface for schedule operations
 type ScheduleService interface {
-	CreateSchedule(ctx context.Context, workflowID uuid.UUID, req *models.CreateScheduleRequest) (*models.WorkflowSchedule, error)
-	GetSchedule(ctx context.Context, id uuid.UUID) (*models.WorkflowSchedule, error)
-	GetWorkflowSchedules(ctx context.Context, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error)
-	UpdateSchedule(ctx context.Context, id uuid.UUID, req *models.UpdateScheduleRequest) (*models.WorkflowSchedule, error)
-	DeleteSchedule(ctx context.Context, id uuid.UUID) error
-	GetNextRuns(ctx context.Context, id uuid.UUID, count int) ([]time.Time, error)
-	ListSchedules(ctx context.Context, limit, offset int) ([]*models.WorkflowSchedule, int64, error)
+	CreateSchedule(ctx context.Context, organizationID, workflowID uuid.UUID, req *models.CreateScheduleRequest) (*models.WorkflowSchedule, error)
+	GetSchedule(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowSchedule, error)
+	GetWorkflowSchedules(ctx context.Context, organizationID, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error)
+	UpdateSchedule(ctx context.Context, organizationID, id uuid.UUID, req *models.UpdateScheduleRequest) (*models.WorkflowSchedule, error)
+	DeleteSchedule(ctx context.Context, organizationID, id uuid.UUID) error
+	GetNextRuns(ctx context.Context, organizationID, id uuid.UUID, count int) ([]time.Time, error)
+	ListSchedules(ctx context.Context, organizationID uuid.UUID, limit, offset int) ([]*models.WorkflowSchedule, int64, error)
 }
 
 // ScheduleHandler handles schedule-related HTTP requests
@@ -41,6 +42,13 @@ func NewScheduleHandler(log *logger.Logger, scheduleService ScheduleService) *Sc
 
 // CreateSchedule handles POST /api/v1/workflows/:id/schedules
 func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	workflowIDStr := chi.URLParam(r, "id")
 	workflowID, err := uuid.Parse(workflowIDStr)
 	if err != nil {
@@ -60,7 +68,7 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	schedule, err := h.scheduleService.CreateSchedule(r.Context(), workflowID, &req)
+	schedule, err := h.scheduleService.CreateSchedule(r.Context(), organizationID, workflowID, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to create schedule: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to create schedule: "+err.Error())
@@ -74,6 +82,13 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 
 // GetWorkflowSchedules handles GET /api/v1/workflows/:id/schedules
 func (h *ScheduleHandler) GetWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	workflowIDStr := chi.URLParam(r, "id")
 	workflowID, err := uuid.Parse(workflowIDStr)
 	if err != nil {
@@ -81,7 +96,7 @@ func (h *ScheduleHandler) GetWorkflowSchedules(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	schedules, err := h.scheduleService.GetWorkflowSchedules(r.Context(), workflowID)
+	schedules, err := h.scheduleService.GetWorkflowSchedules(r.Context(), organizationID, workflowID)
 	if err != nil {
 		h.logger.Errorf("Failed to get workflow schedules: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to get schedules")
@@ -99,6 +114,13 @@ func (h *ScheduleHandler) GetWorkflowSchedules(w http.ResponseWriter, r *http.Re
 
 // GetSchedule handles GET /api/v1/schedules/:id
 func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -106,7 +128,7 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schedule, err := h.scheduleService.GetSchedule(r.Context(), id)
+	schedule, err := h.scheduleService.GetSchedule(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get schedule: %v", err)
 		RespondError(w, http.StatusNotFound, "Schedule not found")
@@ -119,6 +141,13 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSchedule handles PUT /api/v1/schedules/:id
 func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -132,7 +161,7 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	schedule, err := h.scheduleService.UpdateSchedule(r.Context(), id, &req)
+	schedule, err := h.scheduleService.UpdateSchedule(r.Context(), organizationID, id, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to update schedule: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to update schedule: "+err.Error())
@@ -145,6 +174,13 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 
 // DeleteSchedule handles DELETE /api/v1/schedules/:id
 func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -152,7 +188,7 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.scheduleService.DeleteSchedule(r.Context(), id); err != nil {
+	if err := h.scheduleService.DeleteSchedule(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to delete schedule: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to delete schedule")
 		return
@@ -165,6 +201,13 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 
 // GetNextRuns handles GET /api/v1/schedules/:id/next-runs
 func (h *ScheduleHandler) GetNextRuns(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -181,7 +224,7 @@ func (h *ScheduleHandler) GetNextRuns(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	nextRuns, err := h.scheduleService.GetNextRuns(r.Context(), id, count)
+	nextRuns, err := h.scheduleService.GetNextRuns(r.Context(), organizationID, id, count)
 	if err != nil {
 		h.logger.Errorf("Failed to get next runs: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to get next runs")
@@ -199,6 +242,13 @@ func (h *ScheduleHandler) GetNextRuns(w http.ResponseWriter, r *http.Request) {
 
 // ListSchedules handles GET /api/v1/schedules
 func (h *ScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	// Parse pagination parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
@@ -217,7 +267,7 @@ func (h *ScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	schedules, total, err := h.scheduleService.ListSchedules(r.Context(), limit, offset)
+	schedules, total, err := h.scheduleService.ListSchedules(r.Context(), organizationID, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list schedules: %v", err)
 		RespondError(w, http.StatusInternalServerError, "Failed to list schedules")

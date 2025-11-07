@@ -16,11 +16,11 @@ import (
 
 // ExecutionRepository defines the interface for execution persistence
 type ExecutionRepository interface {
-	CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error
-	UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error
-	GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	CreateStepExecution(ctx context.Context, step *models.StepExecution) error
-	UpdateStepExecution(ctx context.Context, step *models.StepExecution) error
+	CreateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error)
+	CreateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
+	UpdateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
 }
 
 // WorkflowExecutor executes workflows
@@ -61,6 +61,7 @@ func NewWorkflowExecutor(
 // Execute executes a workflow
 func (we *WorkflowExecutor) Execute(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	workflow *models.Workflow,
 	triggerEvent string,
 	triggerPayload map[string]interface{},
@@ -75,7 +76,7 @@ func (we *WorkflowExecutor) Execute(
 		defer we.metrics.ActiveWorkflows.WithLabelValues(workflowIDStr).Dec()
 	}
 
-	we.logger.Infof("Starting workflow execution: %s (ID: %s)", workflow.Name, workflow.ID)
+	we.logger.Infof("Starting workflow execution: %s (ID: %s) for organization: %s", workflow.Name, workflow.ID, organizationID)
 
 	// Get timeout for this workflow (check Definition.Timeout first, then trigger data, then default)
 	timeout := we.getWorkflowTimeout(workflow)
@@ -91,6 +92,7 @@ func (we *WorkflowExecutor) Execute(
 	// Create execution record
 	execution := &models.WorkflowExecution{
 		ID:             uuid.New(),
+		OrganizationID: organizationID,
 		WorkflowID:     workflow.ID,
 		ExecutionID:    fmt.Sprintf("exec_%s", uuid.New().String()[:8]),
 		TriggerEvent:   triggerEvent,
@@ -110,7 +112,7 @@ func (we *WorkflowExecutor) Execute(
 		execution.Metadata["timeout_seconds"] = timeout.Seconds()
 	}
 
-	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
+	if err := we.executionRepo.CreateExecution(ctx, organizationID, execution); err != nil {
 		return nil, fmt.Errorf("failed to create execution: %w", err)
 	}
 
@@ -316,16 +318,17 @@ func (we *WorkflowExecutor) executeStep(
 ) (string, *ActionResult, error) {
 	// Create step execution record
 	stepExec := &models.StepExecution{
-		ID:          uuid.New(),
-		ExecutionID: execution.ID,
-		StepID:      step.ID,
-		StepType:    step.Type,
-		Status:      models.StepStatusRunning,
-		Input:       execContext,
-		StartedAt:   time.Now(),
+		ID:             uuid.New(),
+		OrganizationID: execution.OrganizationID,
+		ExecutionID:    execution.ID,
+		StepID:         step.ID,
+		StepType:       step.Type,
+		Status:         models.StepStatusRunning,
+		Input:          execContext,
+		StartedAt:      time.Now(),
 	}
 
-	if err := we.executionRepo.CreateStepExecution(ctx, stepExec); err != nil {
+	if err := we.executionRepo.CreateStepExecution(ctx, execution.OrganizationID, stepExec); err != nil {
 		return "", nil, fmt.Errorf("failed to create step execution: %w", err)
 	}
 
@@ -341,6 +344,10 @@ func (we *WorkflowExecutor) executeStep(
 	case "action":
 		actionResult, err = we.executeActionStep(ctx, step, execContext)
 		nextStepID = "" // Action steps end the flow
+
+	case "execute":
+		actionResult, err = we.executeExecuteStep(ctx, step, execContext)
+		nextStepID = "" // Execute steps end the flow
 
 	case "parallel":
 		err = we.executeParallelStep(ctx, execution, step, execContext)
@@ -376,7 +383,7 @@ func (we *WorkflowExecutor) executeStep(
 		}
 	}
 
-	if updateErr := we.executionRepo.UpdateStepExecution(ctx, stepExec); updateErr != nil {
+	if updateErr := we.executionRepo.UpdateStepExecution(ctx, stepExec.OrganizationID, stepExec); updateErr != nil {
 		we.logger.Errorf("Failed to update step execution: %v", updateErr)
 	}
 
@@ -413,6 +420,29 @@ func (we *WorkflowExecutor) executeActionStep(
 	execContext map[string]interface{},
 ) (*ActionResult, error) {
 	return we.actionExecutor.ExecuteAction(ctx, step, execContext)
+}
+
+// executeExecuteStep executes an execute step (webhooks, notifications, etc.)
+func (we *WorkflowExecutor) executeExecuteStep(
+	ctx context.Context,
+	step *models.Step,
+	execContext map[string]interface{},
+) (*ActionResult, error) {
+	if len(step.Execute) == 0 {
+		return nil, fmt.Errorf("execute step has no execute actions defined")
+	}
+
+	// Create a synthetic Action with type "execute" to reuse existing logic
+	syntheticStep := &models.Step{
+		ID:   step.ID,
+		Type: "action",
+		Action: &models.Action{
+			Type: "execute",
+		},
+		Execute: step.Execute,
+	}
+
+	return we.actionExecutor.ExecuteAction(ctx, syntheticStep, execContext)
 }
 
 // executeParallelStep executes steps in parallel
@@ -521,7 +551,7 @@ func (we *WorkflowExecutor) executeWaitStep(
 	execution.CurrentStepID = &step.ID
 	execution.WaitState = waitState
 
-	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := we.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		return fmt.Errorf("failed to update execution to waiting state: %w", err)
 	}
 
@@ -584,7 +614,7 @@ func (we *WorkflowExecutor) ResumeExecution(
 	execution.Status = models.ExecutionStatusRunning
 	execution.WaitState = nil
 
-	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := we.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		return nil, fmt.Errorf("failed to update execution status: %w", err)
 	}
 
@@ -712,7 +742,7 @@ func (we *WorkflowExecutor) completeExecution(
 		execution.Status = models.ExecutionStatusCompleted
 	}
 
-	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := we.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		we.logger.Errorf("Failed to update execution: %v", err)
 	}
 }
@@ -869,7 +899,7 @@ func (we *WorkflowExecutor) PauseCurrentExecution(
 	execution.ResumeData["paused_context"] = execution.Context
 
 	// Update execution in database
-	if err := we.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := we.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		return fmt.Errorf("failed to pause execution: %w", err)
 	}
 

@@ -10,17 +10,18 @@ import (
 
 // Workflow represents a workflow definition
 type Workflow struct {
-	ID          uuid.UUID          `json:"id" db:"id"`
-	WorkflowID  string             `json:"workflow_id" db:"workflow_id"`
-	Version     string             `json:"version" db:"version"`
-	Name        string             `json:"name" db:"name"`
-	Description *string            `json:"description,omitempty" db:"description"`
-	Definition  WorkflowDefinition `json:"definition" db:"definition"`
-	Enabled     bool               `json:"enabled" db:"enabled"`
-	CreatedAt   time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at" db:"updated_at"`
-	CreatedBy   *uuid.UUID         `json:"created_by,omitempty" db:"created_by"`
-	Tags        []string           `json:"tags,omitempty" db:"tags"`
+	ID             uuid.UUID          `json:"id" db:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id" db:"organization_id"`
+	WorkflowID     string             `json:"workflow_id" db:"workflow_id"`
+	Version        string             `json:"version" db:"version"`
+	Name           string             `json:"name" db:"name"`
+	Description    *string            `json:"description,omitempty" db:"description"`
+	Definition     WorkflowDefinition `json:"definition" db:"definition"`
+	Enabled        bool               `json:"enabled" db:"enabled"`
+	CreatedAt      time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at" db:"updated_at"`
+	CreatedBy      *uuid.UUID         `json:"created_by,omitempty" db:"created_by"`
+	Tags           []string           `json:"tags,omitempty" db:"tags"`
 }
 
 // WorkflowDefinition represents the complete workflow definition

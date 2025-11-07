@@ -134,15 +134,18 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert default roles
+-- Insert default roles (idempotent)
 INSERT INTO roles (name, description) VALUES
     ('admin', 'Administrator with full system access'),
     ('workflow_manager', 'Can manage workflows and view executions'),
     ('workflow_viewer', 'Can view workflows and executions'),
     ('approver', 'Can approve/reject approval requests'),
-    ('agent', 'AI agent with limited API access');
+    ('agent', 'AI agent with limited API access')
+ON CONFLICT (name) DO UPDATE
+SET description = EXCLUDED.description,
+    updated_at = NOW();
 
--- Insert default permissions
+-- Insert default permissions (idempotent)
 INSERT INTO permissions (name, resource, action, description) VALUES
     -- Workflow permissions
     ('workflow:create', 'workflow', 'create', 'Create new workflows'),
@@ -154,6 +157,8 @@ INSERT INTO permissions (name, resource, action, description) VALUES
     -- Execution permissions
     ('execution:read', 'execution', 'read', 'View workflow executions'),
     ('execution:cancel', 'execution', 'cancel', 'Cancel running executions'),
+    ('execution:pause', 'execution', 'pause', 'Pause running executions'),
+    ('execution:resume', 'execution', 'resume', 'Resume paused executions'),
 
     -- Approval permissions
     ('approval:read', 'approval', 'read', 'View approval requests'),
@@ -170,16 +175,25 @@ INSERT INTO permissions (name, resource, action, description) VALUES
     ('user:update', 'user', 'update', 'Update users'),
     ('user:delete', 'user', 'delete', 'Delete users'),
 
-    -- Role management permissions
-    ('role:manage', 'role', 'manage', 'Manage roles and permissions');
+    -- Role management permissions (granular)
+    ('role:create', 'role', 'create', 'Create roles'),
+    ('role:read', 'role', 'read', 'View roles'),
+    ('role:update', 'role', 'update', 'Update roles'),
+    ('role:delete', 'role', 'delete', 'Delete roles'),
+    ('role:assign', 'role', 'assign', 'Assign roles to users')
+ON CONFLICT (name) DO UPDATE
+SET resource = EXCLUDED.resource,
+    action = EXCLUDED.action,
+    description = EXCLUDED.description;
 
--- Assign permissions to roles
+-- Assign permissions to roles (idempotent)
 -- Admin gets all permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM roles r
 CROSS JOIN permissions p
-WHERE r.name = 'admin';
+WHERE r.name = 'admin'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Workflow Manager permissions
 INSERT INTO role_permissions (role_id, permission_id)
@@ -189,9 +203,10 @@ CROSS JOIN permissions p
 WHERE r.name = 'workflow_manager'
 AND p.name IN (
     'workflow:create', 'workflow:read', 'workflow:update', 'workflow:delete', 'workflow:execute',
-    'execution:read', 'execution:cancel',
+    'execution:read', 'execution:cancel', 'execution:pause', 'execution:resume',
     'event:read', 'approval:read'
-);
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Workflow Viewer permissions
 INSERT INTO role_permissions (role_id, permission_id)
@@ -199,7 +214,8 @@ SELECT r.id, p.id
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'workflow_viewer'
-AND p.name IN ('workflow:read', 'execution:read', 'event:read', 'approval:read');
+AND p.name IN ('workflow:read', 'execution:read', 'event:read', 'approval:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Approver permissions
 INSERT INTO role_permissions (role_id, permission_id)
@@ -207,7 +223,8 @@ SELECT r.id, p.id
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'approver'
-AND p.name IN ('approval:read', 'approval:approve', 'approval:reject', 'execution:read');
+AND p.name IN ('approval:read', 'approval:approve', 'approval:reject', 'execution:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Agent permissions (limited API access)
 INSERT INTO role_permissions (role_id, permission_id)
@@ -215,4 +232,5 @@ SELECT r.id, p.id
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'agent'
-AND p.name IN ('workflow:execute', 'event:create', 'event:read', 'execution:read');
+AND p.name IN ('workflow:execute', 'event:create', 'event:read', 'execution:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;

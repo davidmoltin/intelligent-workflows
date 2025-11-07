@@ -43,6 +43,7 @@ func JWTAuth(authService *services.AuthService, log *logger.Logger) func(next ht
 			// Add claims to context
 			ctx := context.WithValue(r.Context(), "claims", claims)
 			ctx = context.WithValue(ctx, "user_id", claims.UserID)
+			ctx = context.WithValue(ctx, "organization_id", claims.OrganizationID)
 			ctx = context.WithValue(ctx, "username", claims.Username)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -62,7 +63,7 @@ func APIKeyAuth(authService *services.AuthService, log *logger.Logger) func(next
 			}
 
 			// Validate API key
-			user, scopes, err := authService.ValidateAPIKey(r.Context(), apiKey)
+			user, organizationID, scopes, err := authService.ValidateAPIKey(r.Context(), apiKey)
 			if err != nil {
 				log.Warn("Invalid API key", zap.Error(err))
 				respondError(w, http.StatusUnauthorized, "Invalid API key")
@@ -71,14 +72,16 @@ func APIKeyAuth(authService *services.AuthService, log *logger.Logger) func(next
 
 			// Create claims-like structure for API key
 			apiClaims := &auth.JWTClaims{
-				UserID:   user.ID,
-				Username: user.Username,
-				Email:    user.Email,
+				UserID:         user.ID,
+				OrganizationID: organizationID,
+				Username:       user.Username,
+				Email:          user.Email,
 			}
 
 			// Add to context
 			ctx := context.WithValue(r.Context(), "claims", apiClaims)
 			ctx = context.WithValue(ctx, "user_id", user.ID)
+			ctx = context.WithValue(ctx, "organization_id", organizationID)
 			ctx = context.WithValue(ctx, "username", user.Username)
 			ctx = context.WithValue(ctx, "scopes", scopes)
 			ctx = context.WithValue(ctx, "auth_type", "api_key")
@@ -101,6 +104,7 @@ func OptionalAuth(authService *services.AuthService, log *logger.Logger) func(ne
 					if err == nil {
 						ctx := context.WithValue(r.Context(), "claims", claims)
 						ctx = context.WithValue(ctx, "user_id", claims.UserID)
+						ctx = context.WithValue(ctx, "organization_id", claims.OrganizationID)
 						ctx = context.WithValue(ctx, "username", claims.Username)
 						ctx = context.WithValue(ctx, "auth_type", "jwt")
 						next.ServeHTTP(w, r.WithContext(ctx))
@@ -112,15 +116,17 @@ func OptionalAuth(authService *services.AuthService, log *logger.Logger) func(ne
 			// Try API key
 			apiKey := r.Header.Get("X-API-Key")
 			if apiKey != "" {
-				user, scopes, err := authService.ValidateAPIKey(r.Context(), apiKey)
+				user, organizationID, scopes, err := authService.ValidateAPIKey(r.Context(), apiKey)
 				if err == nil {
 					apiClaims := &auth.JWTClaims{
-						UserID:   user.ID,
-						Username: user.Username,
-						Email:    user.Email,
+						UserID:         user.ID,
+						OrganizationID: organizationID,
+						Username:       user.Username,
+						Email:          user.Email,
 					}
 					ctx := context.WithValue(r.Context(), "claims", apiClaims)
 					ctx = context.WithValue(ctx, "user_id", user.ID)
+					ctx = context.WithValue(ctx, "organization_id", organizationID)
 					ctx = context.WithValue(ctx, "username", user.Username)
 					ctx = context.WithValue(ctx, "scopes", scopes)
 					ctx = context.WithValue(ctx, "auth_type", "api_key")
@@ -143,4 +149,30 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	// Use proper JSON encoding to prevent injection attacks
 	response := map[string]string{"error": message}
 	json.NewEncoder(w).Encode(response)
+}
+
+// GetOrganizationID extracts organization ID from request context
+// Returns uuid.Nil if not found
+func GetOrganizationID(ctx context.Context) uuid.UUID {
+	if orgID, ok := ctx.Value("organization_id").(uuid.UUID); ok {
+		return orgID
+	}
+	return uuid.Nil
+}
+
+// GetUserID extracts user ID from request context
+// Returns uuid.Nil if not found
+func GetUserID(ctx context.Context) uuid.UUID {
+	if userID, ok := ctx.Value("user_id").(uuid.UUID); ok {
+		return userID
+	}
+	return uuid.Nil
+}
+
+// GetClaims extracts JWT claims from request context
+func GetClaims(ctx context.Context) *auth.JWTClaims {
+	if claims, ok := ctx.Value("claims").(*auth.JWTClaims); ok {
+		return claims
+	}
+	return nil
 }

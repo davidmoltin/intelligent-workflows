@@ -30,44 +30,44 @@ func getTestContextEnrichmentConfigForExecutor() *config.ContextEnrichmentConfig
 
 // Mock ExecutionRepository
 type mockExecutionRepo struct {
-	createExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
-	updateExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
-	getExecutionByIDFunc    func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	createStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
-	updateStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
+	createExecutionFunc     func(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	updateExecutionFunc     func(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	getExecutionByIDFunc    func(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error)
+	createStepExecutionFunc func(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
+	updateStepExecutionFunc func(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
 }
 
-func (m *mockExecutionRepo) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+func (m *mockExecutionRepo) CreateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error {
 	if m.createExecutionFunc != nil {
-		return m.createExecutionFunc(ctx, execution)
+		return m.createExecutionFunc(ctx, organizationID, execution)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+func (m *mockExecutionRepo) UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error {
 	if m.updateExecutionFunc != nil {
-		return m.updateExecutionFunc(ctx, execution)
+		return m.updateExecutionFunc(ctx, organizationID, execution)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
+func (m *mockExecutionRepo) GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error) {
 	if m.getExecutionByIDFunc != nil {
-		return m.getExecutionByIDFunc(ctx, id)
+		return m.getExecutionByIDFunc(ctx, organizationID, id)
 	}
 	return nil, errors.New("not found")
 }
 
-func (m *mockExecutionRepo) CreateStepExecution(ctx context.Context, step *models.StepExecution) error {
+func (m *mockExecutionRepo) CreateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error {
 	if m.createStepExecutionFunc != nil {
-		return m.createStepExecutionFunc(ctx, step)
+		return m.createStepExecutionFunc(ctx, organizationID, step)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) UpdateStepExecution(ctx context.Context, step *models.StepExecution) error {
+func (m *mockExecutionRepo) UpdateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error {
 	if m.updateStepExecutionFunc != nil {
-		return m.updateStepExecutionFunc(ctx, step)
+		return m.updateStepExecutionFunc(ctx, organizationID, step)
 	}
 	return nil
 }

@@ -25,11 +25,12 @@ type JWTManager struct {
 
 // JWTClaims represents the claims in our JWT token
 type JWTClaims struct {
-	UserID      uuid.UUID `json:"user_id"`
-	Username    string    `json:"username"`
-	Email       string    `json:"email"`
-	Roles       []string  `json:"roles"`
-	Permissions []string  `json:"permissions"`
+	UserID         uuid.UUID `json:"user_id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Username       string    `json:"username"`
+	Email          string    `json:"email"`
+	Roles          []string  `json:"roles"`
+	Permissions    []string  `json:"permissions"`
 	jwt.RegisteredClaims
 }
 
@@ -52,15 +53,16 @@ func NewJWTManagerWithTTL(secretKey string, accessTTL, refreshTTL time.Duration)
 }
 
 // GenerateAccessToken generates a new JWT access token
-func (m *JWTManager) GenerateAccessToken(userID uuid.UUID, username, email string, roles, permissions []string) (string, error) {
+func (m *JWTManager) GenerateAccessToken(userID, organizationID uuid.UUID, username, email string, roles, permissions []string) (string, error) {
 	now := time.Now()
 
 	claims := &JWTClaims{
-		UserID:      userID,
-		Username:    username,
-		Email:       email,
-		Roles:       roles,
-		Permissions: permissions,
+		UserID:         userID,
+		OrganizationID: organizationID,
+		Username:       username,
+		Email:          email,
+		Roles:          roles,
+		Permissions:    permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),

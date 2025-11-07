@@ -28,14 +28,16 @@ type WorkflowResumerImpl struct {
 	logger        *logger.Logger
 	executionRepo ExecutionRepository
 	engine        WorkflowEngine
+	auditService  *AuditService
 }
 
 // NewWorkflowResumer creates a new workflow resumer
-func NewWorkflowResumer(log *logger.Logger, executionRepo ExecutionRepository, engine WorkflowEngine) *WorkflowResumerImpl {
+func NewWorkflowResumer(log *logger.Logger, executionRepo ExecutionRepository, engine WorkflowEngine, auditService *AuditService) *WorkflowResumerImpl {
 	return &WorkflowResumerImpl{
 		logger:        log,
 		executionRepo: executionRepo,
 		engine:        engine,
+		auditService:  auditService,
 	}
 }
 
@@ -72,6 +74,15 @@ func (w *WorkflowResumerImpl) PauseExecution(ctx context.Context, executionID uu
 	if err := w.executionRepo.UpdateExecution(ctx, execution); err != nil {
 		w.logger.Errorf("Failed to pause execution %s: %v", executionID, err)
 		return fmt.Errorf("failed to update execution: %w", err)
+	}
+
+	// Log audit event
+	// TODO: Extract actor ID from context instead of using system actor
+	if w.auditService != nil {
+		systemActorID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
+		if err := w.auditService.LogExecutionPaused(ctx, executionID, systemActorID, "system", reason); err != nil {
+			w.logger.Errorf("Failed to log audit event for execution pause: %v", err)
+		}
 	}
 
 	w.logger.Infof("Successfully paused execution %s", executionID)
@@ -169,6 +180,15 @@ func (w *WorkflowResumerImpl) resumeExecution(ctx context.Context, execution *mo
 		}
 	} else {
 		w.logger.Warn("Workflow engine not configured, execution state updated but not resumed")
+	}
+
+	// Log audit event
+	// TODO: Extract actor ID from context instead of using system actor
+	if w.auditService != nil {
+		systemActorID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
+		if err := w.auditService.LogExecutionResumed(ctx, execution.ID, systemActorID, "system"); err != nil {
+			w.logger.Errorf("Failed to log audit event for execution resume: %v", err)
+		}
 	}
 
 	w.logger.Infof("Successfully resumed execution %s (resume count: %d)", execution.ID, execution.ResumeCount)
