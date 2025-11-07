@@ -572,7 +572,7 @@ func (we *WorkflowExecutor) ResumeExecution(
 	we.logger.Infof("Resuming workflow execution: %s with event: %s", executionID, resumeEvent)
 
 	// Load execution from database
-	execution, err := we.executionRepo.GetExecutionByID(ctx, executionID)
+	execution, err := we.executionRepo.GetExecutionByID(ctx, uuid.Nil, executionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load execution: %w", err)
 	}
@@ -816,7 +816,7 @@ func (we *WorkflowExecutor) ResumePausedExecution(ctx context.Context, execution
 	}
 
 	// Load workflow definition
-	workflow, err := we.workflowRepo.GetWorkflowByID(ctx, execution.WorkflowID)
+	workflow, err := we.workflowRepo.GetWorkflowByID(ctx, execution.OrganizationID, execution.WorkflowID)
 	if err != nil {
 		return fmt.Errorf("failed to load workflow: %w", err)
 	}
