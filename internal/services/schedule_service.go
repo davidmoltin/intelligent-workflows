@@ -43,7 +43,7 @@ func NewScheduleService(scheduleRepo ScheduleRepository, log *logger.Logger) *Sc
 }
 
 // CreateSchedule creates a new workflow schedule
-func (s *ScheduleService) CreateSchedule(ctx context.Context, workflowID uuid.UUID, req *models.CreateScheduleRequest) (*models.WorkflowSchedule, error) {
+func (s *ScheduleService) CreateSchedule(ctx context.Context, organizationID, workflowID uuid.UUID, req *models.CreateScheduleRequest) (*models.WorkflowSchedule, error) {
 	// Validate cron expression
 	schedule, err := s.parser.Parse(req.CronExpression)
 	if err != nil {
@@ -74,6 +74,7 @@ func (s *ScheduleService) CreateSchedule(ctx context.Context, workflowID uuid.UU
 	// Create schedule
 	newSchedule := &models.WorkflowSchedule{
 		ID:             uuid.New(),
+		OrganizationID: organizationID,
 		WorkflowID:     workflowID,
 		CronExpression: req.CronExpression,
 		Timezone:       timezone,
@@ -93,19 +94,19 @@ func (s *ScheduleService) CreateSchedule(ctx context.Context, workflowID uuid.UU
 }
 
 // GetSchedule retrieves a schedule by ID
-func (s *ScheduleService) GetSchedule(ctx context.Context, id uuid.UUID) (*models.WorkflowSchedule, error) {
-	return s.scheduleRepo.GetByID(ctx, id)
+func (s *ScheduleService) GetSchedule(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowSchedule, error) {
+	return s.scheduleRepo.GetByID(ctx, organizationID, id)
 }
 
 // GetWorkflowSchedules retrieves all schedules for a workflow
-func (s *ScheduleService) GetWorkflowSchedules(ctx context.Context, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error) {
-	return s.scheduleRepo.GetByWorkflowID(ctx, workflowID)
+func (s *ScheduleService) GetWorkflowSchedules(ctx context.Context, organizationID, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error) {
+	return s.scheduleRepo.GetByWorkflowID(ctx, organizationID, workflowID)
 }
 
 // UpdateSchedule updates a workflow schedule
-func (s *ScheduleService) UpdateSchedule(ctx context.Context, id uuid.UUID, req *models.UpdateScheduleRequest) (*models.WorkflowSchedule, error) {
+func (s *ScheduleService) UpdateSchedule(ctx context.Context, organizationID, id uuid.UUID, req *models.UpdateScheduleRequest) (*models.WorkflowSchedule, error) {
 	// Get existing schedule
-	existing, err := s.scheduleRepo.GetByID(ctx, id)
+	existing, err := s.scheduleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,7 @@ func (s *ScheduleService) UpdateSchedule(ctx context.Context, id uuid.UUID, req 
 	}
 
 	// Save updates
-	if err := s.scheduleRepo.Update(ctx, existing); err != nil {
+	if err := s.scheduleRepo.Update(ctx, organizationID, existing); err != nil {
 		return nil, fmt.Errorf("failed to update schedule: %w", err)
 	}
 
@@ -160,8 +161,8 @@ func (s *ScheduleService) UpdateSchedule(ctx context.Context, id uuid.UUID, req 
 }
 
 // DeleteSchedule deletes a workflow schedule
-func (s *ScheduleService) DeleteSchedule(ctx context.Context, id uuid.UUID) error {
-	if err := s.scheduleRepo.Delete(ctx, id); err != nil {
+func (s *ScheduleService) DeleteSchedule(ctx context.Context, organizationID, id uuid.UUID) error {
+	if err := s.scheduleRepo.Delete(ctx, organizationID, id); err != nil {
 		return fmt.Errorf("failed to delete schedule: %w", err)
 	}
 
@@ -171,13 +172,13 @@ func (s *ScheduleService) DeleteSchedule(ctx context.Context, id uuid.UUID) erro
 }
 
 // GetDueSchedules retrieves all schedules that are due to run
-func (s *ScheduleService) GetDueSchedules(ctx context.Context) ([]*models.WorkflowSchedule, error) {
-	return s.scheduleRepo.GetDueSchedules(ctx)
+func (s *ScheduleService) GetDueSchedules(ctx context.Context, organizationID uuid.UUID) ([]*models.WorkflowSchedule, error) {
+	return s.scheduleRepo.GetDueSchedules(ctx, organizationID)
 }
 
 // MarkTriggered marks a schedule as triggered and calculates the next run time
-func (s *ScheduleService) MarkTriggered(ctx context.Context, id uuid.UUID) error {
-	schedule, err := s.scheduleRepo.GetByID(ctx, id)
+func (s *ScheduleService) MarkTriggered(ctx context.Context, organizationID, id uuid.UUID) error {
+	schedule, err := s.scheduleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return err
 	}
@@ -199,7 +200,7 @@ func (s *ScheduleService) MarkTriggered(ctx context.Context, id uuid.UUID) error
 	nextTrigger := cronSchedule.Next(now)
 
 	// Update trigger times
-	if err := s.scheduleRepo.UpdateNextTrigger(ctx, id, now, nextTrigger); err != nil {
+	if err := s.scheduleRepo.UpdateNextTrigger(ctx, organizationID, id, now, nextTrigger); err != nil {
 		return fmt.Errorf("failed to update trigger times: %w", err)
 	}
 
@@ -209,12 +210,12 @@ func (s *ScheduleService) MarkTriggered(ctx context.Context, id uuid.UUID) error
 }
 
 // GetNextRuns calculates the next N run times for a schedule
-func (s *ScheduleService) GetNextRuns(ctx context.Context, id uuid.UUID, count int) ([]time.Time, error) {
+func (s *ScheduleService) GetNextRuns(ctx context.Context, organizationID, id uuid.UUID, count int) ([]time.Time, error) {
 	if count <= 0 || count > 100 {
 		count = 10 // Default to 10, max 100
 	}
 
-	schedule, err := s.scheduleRepo.GetByID(ctx, id)
+	schedule, err := s.scheduleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func (s *ScheduleService) ValidateCronExpression(expression string) error {
 }
 
 // ListSchedules retrieves all schedules with pagination
-func (s *ScheduleService) ListSchedules(ctx context.Context, limit, offset int) ([]*models.WorkflowSchedule, int64, error) {
+func (s *ScheduleService) ListSchedules(ctx context.Context, organizationID uuid.UUID, limit, offset int) ([]*models.WorkflowSchedule, int64, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -257,5 +258,5 @@ func (s *ScheduleService) ListSchedules(ctx context.Context, limit, offset int) 
 		offset = 0
 	}
 
-	return s.scheduleRepo.List(ctx, limit, offset)
+	return s.scheduleRepo.List(ctx, organizationID, limit, offset)
 }
