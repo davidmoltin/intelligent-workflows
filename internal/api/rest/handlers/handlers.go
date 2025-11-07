@@ -14,17 +14,19 @@ import (
 
 // Handlers aggregates all HTTP handlers
 type Handlers struct {
-	Health    *HealthHandler
-	Workflow  *WorkflowHandler
-	Event     *EventHandler
-	Execution *ExecutionHandler
-	Approval  *ApprovalHandler
-	Auth      *AuthHandler
-	Docs      *DocsHandler
-	AI        *AIHandler
-	Analytics *AnalyticsHandler
-	Schedule  *ScheduleHandler
-	WebSocket *websocket.Handler
+	Health       *HealthHandler
+	Workflow     *WorkflowHandler
+	Event        *EventHandler
+	Execution    *ExecutionHandler
+	Approval     *ApprovalHandler
+	Auth         *AuthHandler
+	Organization *OrganizationHandler
+	Docs         *DocsHandler
+	AI           *AIHandler
+	Analytics    *AnalyticsHandler
+	Schedule     *ScheduleHandler
+	Audit        *AuditHandler
+	WebSocket    *websocket.Handler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -39,6 +41,7 @@ func NewHandlers(
 	workflowRepo *postgres.WorkflowRepository,
 	executionRepo *postgres.ExecutionRepository,
 	analyticsRepo *postgres.AnalyticsRepository,
+	organizationRepo *postgres.OrganizationRepository,
 	eventRouter *engine.EventRouter,
 	approvalService *services.ApprovalService,
 	authService *services.AuthService,
@@ -46,6 +49,7 @@ func NewHandlers(
 	workflowResumer *services.WorkflowResumerImpl,
 	aiService *services.AIService,
 	wsHub *websocket.Hub,
+	auditService *services.AuditService,
 	healthCheckers *HealthCheckers,
 	version string,
 ) *Handlers {
@@ -55,18 +59,26 @@ func NewHandlers(
 		aiHandler = NewAIHandler(aiService, log.Logger)
 	}
 
+	// Handle Audit handler initialization
+	var auditHandler *AuditHandler
+	if auditService != nil {
+		auditHandler = NewAuditHandler(log, auditService)
+	}
+
 	return &Handlers{
-		Health:    NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis, version),
-		Workflow:  NewWorkflowHandler(log, workflowRepo),
-		Event:     NewEventHandler(log, eventRouter),
-		Execution: NewExecutionHandler(log, executionRepo, workflowResumer),
-		Approval:  NewApprovalHandler(log, approvalService),
-		Auth:      NewAuthHandler(log, authService),
-		Docs:      NewDocsHandler(),
-		AI:        aiHandler,
-		Analytics: NewAnalyticsHandler(log, analyticsRepo),
-		Schedule:  NewScheduleHandler(log, scheduleService),
-		WebSocket: websocket.NewHandler(wsHub, log.Logger),
+		Health:       NewHealthHandler(log, healthCheckers.DB, healthCheckers.Redis, version),
+		Workflow:     NewWorkflowHandler(log, workflowRepo, auditService),
+		Event:        NewEventHandler(log, eventRouter),
+		Execution:    NewExecutionHandler(log, executionRepo, workflowResumer),
+		Approval:     NewApprovalHandler(log, approvalService),
+		Auth:         NewAuthHandler(log, authService),
+		Organization: NewOrganizationHandler(log, organizationRepo),
+		Docs:         NewDocsHandler(),
+		AI:           aiHandler,
+		Analytics:    NewAnalyticsHandler(log, analyticsRepo),
+		Schedule:     NewScheduleHandler(log, scheduleService),
+		Audit:        auditHandler,
+		WebSocket:    websocket.NewHandler(wsHub, log.Logger),
 	}
 }
 

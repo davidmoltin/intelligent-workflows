@@ -199,7 +199,7 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKeyResp, err := h.authService.CreateAPIKey(r.Context(), claims.UserID, &req)
+	apiKeyResp, err := h.authService.CreateAPIKey(r.Context(), claims.OrganizationID, claims.UserID, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to create API key", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to create API key")
@@ -218,7 +218,13 @@ func (h *AuthHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.authService.RevokeAPIKey(r.Context(), id); err != nil {
+	// Get organization ID from context (set by auth middleware)
+	organizationID, ok := r.Context().Value("organization_id").(uuid.UUID)
+	if !ok {
+		organizationID = uuid.Nil
+	}
+
+	if err := h.authService.RevokeAPIKey(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to revoke API key", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to revoke API key")
 		return

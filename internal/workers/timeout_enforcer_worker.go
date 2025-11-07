@@ -7,6 +7,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 )
 
 // TimeoutEnforcerWorker handles periodic timeout enforcement for running workflows
@@ -81,7 +82,8 @@ func (w *TimeoutEnforcerWorker) enforceTimeouts(ctx context.Context) {
 	w.logger.Debug("Checking for timed-out executions")
 
 	// Find all running/waiting executions with timeout_at < NOW()
-	executions, err := w.executionRepo.GetTimedOutExecutions(ctx, 100)
+	// uuid.Nil means check across all organizations
+	executions, err := w.executionRepo.GetTimedOutExecutions(ctx, uuid.Nil, 100)
 	if err != nil {
 		w.logger.Errorf("Failed to fetch timed-out executions: %v", err)
 		return
@@ -132,10 +134,10 @@ func (w *TimeoutEnforcerWorker) failTimedOutExecution(ctx context.Context, execu
 	}
 	execution.ErrorMessage = &errorMsg
 
-	if err := w.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := w.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		return err
 	}
 
-	w.logger.Infof("Successfully failed timed-out execution: %s", execution.ExecutionID)
+	w.logger.Infof("Successfully failed timed-out execution: %s (organization: %s)", execution.ExecutionID, execution.OrganizationID)
 	return nil
 }

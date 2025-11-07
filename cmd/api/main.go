@@ -78,10 +78,12 @@ func run() error {
 	analyticsRepo := postgres.NewAnalyticsRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	organizationRepo := postgres.NewOrganizationRepository(db.DB)
 	userRepo := postgres.NewUserRepository(db.DB)
 	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
+	auditRepo := postgres.NewAuditRepository(db.DB)
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(redis.Client, log.Logger)
@@ -101,8 +103,11 @@ func run() error {
 		return fmt.Errorf("failed to initialize notification service: %w", err)
 	}
 
+	// Initialize audit service
+	auditService := services.NewAuditService(auditRepo, log)
+
 	// Initialize workflow resumer
-	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor)
+	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor, auditService)
 
 	// Initialize JWT manager
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -161,8 +166,8 @@ func run() error {
 	}
 
 	// Initialize services
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, cfg.App.DefaultApproverEmail)
-	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, auditService, cfg.App.DefaultApproverEmail)
+	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, organizationRepo, jwtManager, log)
 	scheduleService := services.NewScheduleService(scheduleRepo, log)
 
 	// Initialize and start approval expiration worker
@@ -189,6 +194,7 @@ func run() error {
 		workflowRepo,
 		executionRepo,
 		analyticsRepo,
+		organizationRepo,
 		eventRouter,
 		approvalService,
 		authService,
@@ -196,6 +202,7 @@ func run() error {
 		workflowResumer,
 		aiService,
 		wsHub,
+		auditService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,

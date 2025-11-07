@@ -35,6 +35,7 @@ const (
 // WorkflowExecution represents an execution instance of a workflow
 type WorkflowExecution struct {
 	ID             uuid.UUID        `json:"id" db:"id"`
+	OrganizationID uuid.UUID        `json:"organization_id" db:"organization_id"`
 	WorkflowID     uuid.UUID        `json:"workflow_id" db:"workflow_id"`
 	ExecutionID    string           `json:"execution_id" db:"execution_id"`
 	TriggerEvent   string           `json:"trigger_event" db:"trigger_event"`
@@ -104,17 +105,18 @@ const (
 
 // StepExecution represents an execution of a workflow step
 type StepExecution struct {
-	ID           uuid.UUID           `json:"id" db:"id"`
-	ExecutionID  uuid.UUID           `json:"execution_id" db:"execution_id"`
-	StepID       string              `json:"step_id" db:"step_id"`
-	StepType     string              `json:"step_type" db:"step_type"`
-	Status       StepExecutionStatus `json:"status" db:"status"`
-	Input        JSONB               `json:"input,omitempty" db:"input"`
-	Output       JSONB               `json:"output,omitempty" db:"output"`
-	StartedAt    time.Time           `json:"started_at" db:"started_at"`
-	CompletedAt  *time.Time          `json:"completed_at,omitempty" db:"completed_at"`
-	DurationMs   *int                `json:"duration_ms,omitempty" db:"duration_ms"`
-	ErrorMessage *string             `json:"error_message,omitempty" db:"error_message"`
+	ID             uuid.UUID           `json:"id" db:"id"`
+	OrganizationID uuid.UUID           `json:"organization_id" db:"organization_id"`
+	ExecutionID    uuid.UUID           `json:"execution_id" db:"execution_id"`
+	StepID         string              `json:"step_id" db:"step_id"`
+	StepType       string              `json:"step_type" db:"step_type"`
+	Status         StepExecutionStatus `json:"status" db:"status"`
+	Input          JSONB               `json:"input,omitempty" db:"input"`
+	Output         JSONB               `json:"output,omitempty" db:"output"`
+	StartedAt      time.Time           `json:"started_at" db:"started_at"`
+	CompletedAt    *time.Time          `json:"completed_at,omitempty" db:"completed_at"`
+	DurationMs     *int                `json:"duration_ms,omitempty" db:"duration_ms"`
+	ErrorMessage   *string             `json:"error_message,omitempty" db:"error_message"`
 }
 
 // JSONB is a custom type for handling JSONB columns

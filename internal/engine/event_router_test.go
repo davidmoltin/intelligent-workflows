@@ -68,7 +68,7 @@ func TestSafeExecuteWorkflow_NormalExecution(t *testing.T) {
 	workflowRepo := &mockWorkflowRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 
 	eventRepo := &mockEventRepo{}
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
@@ -131,7 +131,7 @@ func TestSafeExecuteWorkflow_PanicRecovery(t *testing.T) {
 
 	// Create an executor that will fail on execution
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 
 	eventRepo := &mockEventRepo{}
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
@@ -202,7 +202,7 @@ func TestRouteEvent_WithWorkflows(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -331,7 +331,7 @@ func TestTriggerWorkflowManually(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -376,7 +376,7 @@ func TestTriggerWorkflowManually_DisabledWorkflow(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -411,7 +411,7 @@ func TestTriggerWorkflowManually_NotFound(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()

@@ -20,8 +20,8 @@ func NewAnalyticsRepository(db *sql.DB) *AnalyticsRepository {
 	return &AnalyticsRepository{db: db}
 }
 
-// GetExecutionStats returns overall execution statistics
-func (r *AnalyticsRepository) GetExecutionStats(ctx context.Context, workflowID *uuid.UUID, timeRange string) (*models.ExecutionStats, error) {
+// GetExecutionStats returns overall execution statistics within an organization
+func (r *AnalyticsRepository) GetExecutionStats(ctx context.Context, organizationID uuid.UUID, workflowID *uuid.UUID, timeRange string) (*models.ExecutionStats, error) {
 	var startTime time.Time
 	switch timeRange {
 	case "1h":
@@ -50,13 +50,14 @@ func (r *AnalyticsRepository) GetExecutionStats(ctx context.Context, workflowID 
 			MIN(CASE WHEN duration_ms IS NOT NULL THEN duration_ms END) as min_duration_ms,
 			MAX(CASE WHEN duration_ms IS NOT NULL THEN duration_ms END) as max_duration_ms
 		FROM workflow_executions
-		WHERE started_at >= $1
-		  AND ($2::uuid IS NULL OR workflow_id = $2)`
+		WHERE organization_id = $1
+		  AND started_at >= $2
+		  AND ($3::uuid IS NULL OR workflow_id = $3)`
 
 	stats := &models.ExecutionStats{}
 	var avgDuration, minDuration, maxDuration sql.NullFloat64
 
-	err := r.db.QueryRowContext(ctx, query, startTime, workflowID).Scan(
+	err := r.db.QueryRowContext(ctx, query, organizationID, startTime, workflowID).Scan(
 		&stats.TotalExecutions,
 		&stats.Completed,
 		&stats.Failed,
@@ -93,8 +94,8 @@ func (r *AnalyticsRepository) GetExecutionStats(ctx context.Context, workflowID 
 	return stats, nil
 }
 
-// GetExecutionTrends returns execution trends over time
-func (r *AnalyticsRepository) GetExecutionTrends(ctx context.Context, workflowID *uuid.UUID, timeRange string, interval string) ([]models.ExecutionTrend, error) {
+// GetExecutionTrends returns execution trends over time within an organization
+func (r *AnalyticsRepository) GetExecutionTrends(ctx context.Context, organizationID uuid.UUID, workflowID *uuid.UUID, timeRange string, interval string) ([]models.ExecutionTrend, error) {
 	var startTime time.Time
 	var truncInterval string
 
@@ -129,12 +130,13 @@ func (r *AnalyticsRepository) GetExecutionTrends(ctx context.Context, workflowID
 			COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
 			COUNT(CASE WHEN status = 'running' THEN 1 END) as running
 		FROM workflow_executions
-		WHERE started_at >= $1
-		  AND ($2::uuid IS NULL OR workflow_id = $2)
+		WHERE organization_id = $1
+		  AND started_at >= $2
+		  AND ($3::uuid IS NULL OR workflow_id = $3)
 		GROUP BY time_bucket
 		ORDER BY time_bucket ASC`, truncInterval)
 
-	rows, err := r.db.QueryContext(ctx, query, startTime, workflowID)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, startTime, workflowID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get execution trends: %w", err)
 	}
@@ -159,8 +161,8 @@ func (r *AnalyticsRepository) GetExecutionTrends(ctx context.Context, workflowID
 	return trends, nil
 }
 
-// GetWorkflowStats returns statistics per workflow
-func (r *AnalyticsRepository) GetWorkflowStats(ctx context.Context, timeRange string, limit int) ([]models.WorkflowStats, error) {
+// GetWorkflowStats returns statistics per workflow within an organization
+func (r *AnalyticsRepository) GetWorkflowStats(ctx context.Context, organizationID uuid.UUID, timeRange string, limit int) ([]models.WorkflowStats, error) {
 	var startTime time.Time
 	switch timeRange {
 	case "1h":
@@ -184,13 +186,14 @@ func (r *AnalyticsRepository) GetWorkflowStats(ctx context.Context, timeRange st
 			COUNT(CASE WHEN we.status = 'failed' THEN 1 END) as failed,
 			AVG(CASE WHEN we.duration_ms IS NOT NULL THEN we.duration_ms END) as avg_duration_ms
 		FROM workflow_executions we
-		LEFT JOIN workflows w ON we.workflow_id = w.id
-		WHERE we.started_at >= $1
+		LEFT JOIN workflows w ON we.workflow_id = w.id AND w.organization_id = $1
+		WHERE we.organization_id = $1
+		  AND we.started_at >= $2
 		GROUP BY we.workflow_id, w.name
 		ORDER BY total_executions DESC
-		LIMIT $2`
+		LIMIT $3`
 
-	rows, err := r.db.QueryContext(ctx, query, startTime, limit)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, startTime, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow stats: %w", err)
 	}
@@ -232,8 +235,8 @@ func (r *AnalyticsRepository) GetWorkflowStats(ctx context.Context, timeRange st
 	return stats, nil
 }
 
-// GetRecentErrors returns recent execution errors
-func (r *AnalyticsRepository) GetRecentErrors(ctx context.Context, workflowID *uuid.UUID, limit int) ([]models.ExecutionError, error) {
+// GetRecentErrors returns recent execution errors within an organization
+func (r *AnalyticsRepository) GetRecentErrors(ctx context.Context, organizationID uuid.UUID, workflowID *uuid.UUID, limit int) ([]models.ExecutionError, error) {
 	query := `
 		SELECT
 			we.id,
@@ -244,14 +247,15 @@ func (r *AnalyticsRepository) GetRecentErrors(ctx context.Context, workflowID *u
 			we.started_at,
 			we.completed_at
 		FROM workflow_executions we
-		LEFT JOIN workflows w ON we.workflow_id = w.id
-		WHERE we.status = 'failed'
+		LEFT JOIN workflows w ON we.workflow_id = w.id AND w.organization_id = $1
+		WHERE we.organization_id = $1
+		  AND we.status = 'failed'
 		  AND we.error_message IS NOT NULL
-		  AND ($1::uuid IS NULL OR we.workflow_id = $1)
+		  AND ($2::uuid IS NULL OR we.workflow_id = $2)
 		ORDER BY we.started_at DESC
-		LIMIT $2`
+		LIMIT $3`
 
-	rows, err := r.db.QueryContext(ctx, query, workflowID, limit)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, workflowID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent errors: %w", err)
 	}
@@ -285,8 +289,8 @@ func (r *AnalyticsRepository) GetRecentErrors(ctx context.Context, workflowID *u
 	return errors, nil
 }
 
-// GetStepStats returns statistics for individual steps
-func (r *AnalyticsRepository) GetStepStats(ctx context.Context, workflowID *uuid.UUID, timeRange string) ([]models.StepStats, error) {
+// GetStepStats returns statistics for individual steps within an organization
+func (r *AnalyticsRepository) GetStepStats(ctx context.Context, organizationID uuid.UUID, workflowID *uuid.UUID, timeRange string) ([]models.StepStats, error) {
 	var startTime time.Time
 	switch timeRange {
 	case "1h":
@@ -310,13 +314,14 @@ func (r *AnalyticsRepository) GetStepStats(ctx context.Context, workflowID *uuid
 			COUNT(CASE WHEN se.status = 'failed' THEN 1 END) as failed,
 			AVG(CASE WHEN se.duration_ms IS NOT NULL THEN se.duration_ms END) as avg_duration_ms
 		FROM step_executions se
-		JOIN workflow_executions we ON se.execution_id = we.id
-		WHERE se.started_at >= $1
-		  AND ($2::uuid IS NULL OR we.workflow_id = $2)
+		JOIN workflow_executions we ON se.execution_id = we.id AND we.organization_id = $1
+		WHERE se.organization_id = $1
+		  AND se.started_at >= $2
+		  AND ($3::uuid IS NULL OR we.workflow_id = $3)
 		GROUP BY se.step_id, se.step_type
 		ORDER BY total_executions DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, startTime, workflowID)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, startTime, workflowID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get step stats: %w", err)
 	}
