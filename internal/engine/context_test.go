@@ -2,12 +2,15 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -34,6 +37,7 @@ func TestBuildContext(t *testing.T) {
 	cfg := getTestContextEnrichmentConfig()
 	builder := NewContextBuilder(redisClient, log, cfg)
 	ctx := context.Background()
+	orgID := uuid.New()
 
 	t.Run("builds context from trigger payload", func(t *testing.T) {
 		triggerPayload := map[string]interface{}{
@@ -46,7 +50,7 @@ func TestBuildContext(t *testing.T) {
 			Load: []string{},
 		}
 
-		execContext, err := builder.BuildContext(ctx, triggerPayload, contextDef)
+		execContext, err := builder.BuildContext(ctx, orgID, triggerPayload, contextDef)
 
 		if err != nil {
 			t.Fatalf("BuildContext failed: %v", err)
@@ -70,7 +74,7 @@ func TestBuildContext(t *testing.T) {
 			Load: []string{"order.details", "customer.history"},
 		}
 
-		execContext, err := builder.BuildContext(ctx, triggerPayload, contextDef)
+		execContext, err := builder.BuildContext(ctx, orgID, triggerPayload, contextDef)
 
 		if err != nil {
 			t.Fatalf("BuildContext failed: %v", err)
@@ -91,6 +95,7 @@ func TestBuildContextFromExisting(t *testing.T) {
 	cfg := getTestContextEnrichmentConfig()
 	builder := NewContextBuilder(redisClient, log, cfg)
 	ctx := context.Background()
+	orgID := uuid.New()
 
 	t.Run("reloads context resources", func(t *testing.T) {
 		existingContext := map[string]interface{}{
@@ -102,7 +107,7 @@ func TestBuildContextFromExisting(t *testing.T) {
 			Load: []string{"order.details"},
 		}
 
-		err := builder.BuildContextFromExisting(ctx, existingContext, contextDef)
+		err := builder.BuildContextFromExisting(ctx, orgID, existingContext, contextDef)
 
 		if err != nil {
 			t.Fatalf("BuildContextFromExisting failed: %v", err)
@@ -123,7 +128,7 @@ func TestBuildContextFromExisting(t *testing.T) {
 			Load: []string{},
 		}
 
-		err := builder.BuildContextFromExisting(ctx, existingContext, contextDef)
+		err := builder.BuildContextFromExisting(ctx, orgID, existingContext, contextDef)
 
 		if err != nil {
 			t.Fatalf("BuildContextFromExisting failed: %v", err)
@@ -201,6 +206,7 @@ func TestBuildCacheKey(t *testing.T) {
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	cfg := getTestContextEnrichmentConfig()
 	builder := NewContextBuilder(redisClient, log, cfg)
+	orgID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
 
 	t.Run("builds key for order.details", func(t *testing.T) {
 		context := map[string]interface{}{
@@ -209,10 +215,11 @@ func TestBuildCacheKey(t *testing.T) {
 			},
 		}
 
-		key := builder.buildCacheKey("order.details", context)
+		key := builder.buildCacheKey(orgID, "order.details", context)
 
-		if key != "context:order.details:ord-123" {
-			t.Errorf("Expected context:order.details:ord-123, got %s", key)
+		expectedKey := fmt.Sprintf("context:%s:order.details:ord-123", orgID.String())
+		if key != expectedKey {
+			t.Errorf("Expected %s, got %s", expectedKey, key)
 		}
 	})
 
@@ -223,25 +230,27 @@ func TestBuildCacheKey(t *testing.T) {
 			},
 		}
 
-		key := builder.buildCacheKey("customer.history", context)
+		key := builder.buildCacheKey(orgID, "customer.history", context)
 
-		if key != "context:customer.history:cust-456" {
-			t.Errorf("Expected context:customer.history:cust-456, got %s", key)
+		expectedKey := fmt.Sprintf("context:%s:customer.history:cust-456", orgID.String())
+		if key != expectedKey {
+			t.Errorf("Expected %s, got %s", expectedKey, key)
 		}
 	})
 
 	t.Run("builds fallback key for unknown resource", func(t *testing.T) {
 		context := map[string]interface{}{}
 
-		key := builder.buildCacheKey("unknown.resource", context)
+		key := builder.buildCacheKey(orgID, "unknown.resource", context)
 
 		if len(key) == 0 {
 			t.Error("Key should not be empty")
 		}
 
-		// Should contain the resource name
-		if key[:20] != "context:unknown.reso" {
-			t.Error("Key should contain resource name")
+		// Should contain the organization ID and resource name
+		expectedPrefix := fmt.Sprintf("context:%s:unknown.resource:", orgID.String())
+		if !strings.HasPrefix(key, expectedPrefix) {
+			t.Errorf("Key should start with %s, got %s", expectedPrefix, key)
 		}
 	})
 }

@@ -39,6 +39,7 @@ func NewContextBuilder(redisClient *redis.Client, log *logger.Logger, cfg *confi
 // BuildContext builds the execution context from trigger payload and context definition
 func (cb *ContextBuilder) BuildContext(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	triggerPayload map[string]interface{},
 	contextDef models.ContextDefinition,
 ) (map[string]interface{}, error) {
@@ -53,9 +54,9 @@ func (cb *ContextBuilder) BuildContext(
 	// Load additional context data as specified
 	if len(contextDef.Load) > 0 {
 		for _, resource := range contextDef.Load {
-			cb.logger.Infof("Loading context resource: %s", resource)
+			cb.logger.Infof("Loading context resource: %s for organization: %s", resource, organizationID)
 
-			data, err := cb.loadResource(ctx, resource, execContext)
+			data, err := cb.loadResource(ctx, organizationID, resource, execContext)
 			if err != nil {
 				cb.logger.Errorf("Failed to load resource %s: %v", resource, err)
 				// Continue loading other resources even if one fails
@@ -73,15 +74,16 @@ func (cb *ContextBuilder) BuildContext(
 // BuildContextFromExisting reloads context resources while preserving existing context
 func (cb *ContextBuilder) BuildContextFromExisting(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	existingContext map[string]interface{},
 	contextDef models.ContextDefinition,
 ) error {
 	// Load additional context data as specified, refreshing stale data
 	if len(contextDef.Load) > 0 {
 		for _, resource := range contextDef.Load {
-			cb.logger.Infof("Reloading context resource: %s", resource)
+			cb.logger.Infof("Reloading context resource: %s for organization: %s", resource, organizationID)
 
-			data, err := cb.loadResource(ctx, resource, existingContext)
+			data, err := cb.loadResource(ctx, organizationID, resource, existingContext)
 			if err != nil {
 				cb.logger.Errorf("Failed to reload resource %s: %v", resource, err)
 				// Continue loading other resources even if one fails
@@ -99,17 +101,18 @@ func (cb *ContextBuilder) BuildContextFromExisting(
 // loadResource loads a specific resource (e.g., order.details, customer.history)
 func (cb *ContextBuilder) loadResource(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	resource string,
 	currentContext map[string]interface{},
 ) (map[string]interface{}, error) {
 	// Try to load from cache first
-	cached, err := cb.getFromCache(ctx, resource, currentContext)
+	cached, err := cb.getFromCache(ctx, organizationID, resource, currentContext)
 	if err == nil && cached != nil {
-		cb.logger.Debugf("Context cache hit for resource: %s", resource)
+		cb.logger.Debugf("Context cache hit for resource: %s (org: %s)", resource, organizationID)
 		return cached, nil
 	}
 
-	cb.logger.Debugf("Context cache miss for resource: %s", resource)
+	cb.logger.Debugf("Context cache miss for resource: %s (org: %s)", resource, organizationID)
 
 	// Check if context enrichment is enabled
 	if !cb.config.Enabled {
@@ -118,7 +121,7 @@ func (cb *ContextBuilder) loadResource(
 	}
 
 	// Load from microservice
-	data, err := cb.fetchFromMicroservice(ctx, resource, currentContext)
+	data, err := cb.fetchFromMicroservice(ctx, organizationID, resource, currentContext)
 	if err != nil {
 		cb.logger.Errorf("Failed to fetch resource %s from microservice: %v", resource, err)
 		// Return empty data on error to allow workflow to continue
@@ -127,7 +130,7 @@ func (cb *ContextBuilder) loadResource(
 
 	// Cache the successful response
 	if len(data) > 0 {
-		if err := cb.setInCache(ctx, resource, currentContext, data, cb.config.CacheTTL); err != nil {
+		if err := cb.setInCache(ctx, organizationID, resource, currentContext, data, cb.config.CacheTTL); err != nil {
 			cb.logger.Warnf("Failed to cache resource %s: %v", resource, err)
 			// Continue even if caching fails
 		}
@@ -139,6 +142,7 @@ func (cb *ContextBuilder) loadResource(
 // fetchFromMicroservice fetches resource data from external microservice
 func (cb *ContextBuilder) fetchFromMicroservice(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	resource string,
 	currentContext map[string]interface{},
 ) (map[string]interface{}, error) {
@@ -175,9 +179,9 @@ func (cb *ContextBuilder) fetchFromMicroservice(
 			}
 		}
 
-		data, lastErr = cb.makeHTTPRequest(ctx, url, resource)
+		data, lastErr = cb.makeHTTPRequest(ctx, organizationID, url, resource)
 		if lastErr == nil {
-			cb.logger.Infof("Successfully fetched resource %s from microservice: %s", resource, url)
+			cb.logger.Infof("Successfully fetched resource %s from microservice: %s (org: %s)", resource, url, organizationID)
 			return data, nil
 		}
 
@@ -190,6 +194,7 @@ func (cb *ContextBuilder) fetchFromMicroservice(
 // makeHTTPRequest makes a single HTTP request to fetch resource data
 func (cb *ContextBuilder) makeHTTPRequest(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	url string,
 	resource string,
 ) (map[string]interface{}, error) {
@@ -203,6 +208,7 @@ func (cb *ContextBuilder) makeHTTPRequest(
 	req.Header.Set("User-Agent", "IntelligentWorkflows/1.0")
 	req.Header.Set("X-Request-ID", uuid.New().String())
 	req.Header.Set("X-Resource-Type", resource)
+	req.Header.Set("X-Organization-ID", organizationID.String())
 
 	// Execute request
 	resp, err := cb.httpClient.Do(req)
@@ -334,11 +340,12 @@ func (cb *ContextBuilder) extractIdentifier(resource string, context map[string]
 // getFromCache retrieves cached context data from Redis
 func (cb *ContextBuilder) getFromCache(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	resource string,
 	currentContext map[string]interface{},
 ) (map[string]interface{}, error) {
 	// Build cache key from resource and context
-	cacheKey := cb.buildCacheKey(resource, currentContext)
+	cacheKey := cb.buildCacheKey(organizationID, resource, currentContext)
 
 	data, err := cb.redis.Get(ctx, cacheKey).Result()
 	if err == redis.Nil {
@@ -359,12 +366,13 @@ func (cb *ContextBuilder) getFromCache(
 // setInCache stores context data in Redis cache
 func (cb *ContextBuilder) setInCache(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	resource string,
 	currentContext map[string]interface{},
 	data map[string]interface{},
 	ttl time.Duration,
 ) error {
-	cacheKey := cb.buildCacheKey(resource, currentContext)
+	cacheKey := cb.buildCacheKey(organizationID, resource, currentContext)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -374,10 +382,10 @@ func (cb *ContextBuilder) setInCache(
 	return cb.redis.Set(ctx, cacheKey, jsonData, ttl).Err()
 }
 
-// buildCacheKey creates a cache key for a resource
-func (cb *ContextBuilder) buildCacheKey(resource string, context map[string]interface{}) string {
+// buildCacheKey creates a cache key for a resource with organization scoping
+func (cb *ContextBuilder) buildCacheKey(organizationID uuid.UUID, resource string, context map[string]interface{}) string {
 	// Extract relevant identifiers from context to build a unique key
-	// Example: "context:order.details:order_id:ord_123"
+	// Example: "context:org_123:order.details:ord_123"
 
 	var identifier string
 
@@ -408,7 +416,8 @@ func (cb *ContextBuilder) buildCacheKey(resource string, context map[string]inte
 		identifier = uuid.New().String()
 	}
 
-	return fmt.Sprintf("context:%s:%s", resource, identifier)
+	// Include organizationID in cache key for multi-tenant isolation
+	return fmt.Sprintf("context:%s:%s:%s", organizationID.String(), resource, identifier)
 }
 
 // mergeIntoContext merges loaded data into the context at the appropriate path
@@ -486,10 +495,10 @@ func (cb *ContextBuilder) addComputedFields(context map[string]interface{}) {
 	}
 }
 
-// ClearCache clears cache entries for specific resources
-func (cb *ContextBuilder) ClearCache(ctx context.Context, pattern string) error {
-	// Use SCAN to find and delete keys matching pattern
-	iter := cb.redis.Scan(ctx, 0, fmt.Sprintf("context:%s:*", pattern), 0).Iterator()
+// ClearCache clears cache entries for specific resources for an organization
+func (cb *ContextBuilder) ClearCache(ctx context.Context, organizationID uuid.UUID, pattern string) error {
+	// Use SCAN to find and delete keys matching pattern for the organization
+	iter := cb.redis.Scan(ctx, 0, fmt.Sprintf("context:%s:%s:*", organizationID.String(), pattern), 0).Iterator()
 
 	var keys []string
 	for iter.Next(ctx) {
