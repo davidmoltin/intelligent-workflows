@@ -25,9 +25,9 @@ func NewAPIKeyRepository(db *sql.DB) *APIKeyRepository {
 func (r *APIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) error {
 	query := `
 		INSERT INTO api_keys (
-			id, key_hash, key_prefix, name, user_id, scopes,
+			id, organization_id, key_hash, key_prefix, name, user_id, scopes,
 			is_active, expires_at, created_at, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at`
 
 	apiKey.ID = uuid.New()
@@ -35,7 +35,7 @@ func (r *APIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) er
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		apiKey.ID, apiKey.KeyHash, apiKey.KeyPrefix, apiKey.Name,
+		apiKey.ID, apiKey.OrganizationID, apiKey.KeyHash, apiKey.KeyPrefix, apiKey.Name,
 		apiKey.UserID, pq.Array(apiKey.Scopes), apiKey.IsActive,
 		apiKey.ExpiresAt, apiKey.CreatedAt, apiKey.CreatedBy,
 	).Scan(&apiKey.ID, &apiKey.CreatedAt)
@@ -47,18 +47,18 @@ func (r *APIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) er
 	return nil
 }
 
-// GetByHash retrieves an API key by its hash
+// GetByHash retrieves an API key by its hash (returns organizationID for verification)
 func (r *APIKeyRepository) GetByHash(ctx context.Context, keyHash string) (*models.APIKey, error) {
 	apiKey := &models.APIKey{}
 	query := `
-		SELECT id, key_hash, key_prefix, name, user_id, scopes,
+		SELECT id, organization_id, key_hash, key_prefix, name, user_id, scopes,
 		       is_active, last_used_at, expires_at, created_at, created_by
 		FROM api_keys
 		WHERE key_hash = $1`
 
 	var scopes pq.StringArray
 	err := r.db.QueryRowContext(ctx, query, keyHash).Scan(
-		&apiKey.ID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
+		&apiKey.ID, &apiKey.OrganizationID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
 		&apiKey.UserID, &scopes, &apiKey.IsActive,
 		&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt, &apiKey.CreatedBy,
 	)
@@ -74,18 +74,18 @@ func (r *APIKeyRepository) GetByHash(ctx context.Context, keyHash string) (*mode
 	return apiKey, nil
 }
 
-// GetByID retrieves an API key by ID
-func (r *APIKeyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.APIKey, error) {
+// GetByID retrieves an API key by ID within an organization
+func (r *APIKeyRepository) GetByID(ctx context.Context, organizationID, id uuid.UUID) (*models.APIKey, error) {
 	apiKey := &models.APIKey{}
 	query := `
-		SELECT id, key_hash, key_prefix, name, user_id, scopes,
+		SELECT id, organization_id, key_hash, key_prefix, name, user_id, scopes,
 		       is_active, last_used_at, expires_at, created_at, created_by
 		FROM api_keys
-		WHERE id = $1`
+		WHERE organization_id = $1 AND id = $2`
 
 	var scopes pq.StringArray
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&apiKey.ID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
+	err := r.db.QueryRowContext(ctx, query, organizationID, id).Scan(
+		&apiKey.ID, &apiKey.OrganizationID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
 		&apiKey.UserID, &scopes, &apiKey.IsActive,
 		&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt, &apiKey.CreatedBy,
 	)
@@ -101,16 +101,16 @@ func (r *APIKeyRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.A
 	return apiKey, nil
 }
 
-// ListByUser retrieves all API keys for a user
-func (r *APIKeyRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]*models.APIKey, error) {
+// ListByUser retrieves all API keys for a user within an organization
+func (r *APIKeyRepository) ListByUser(ctx context.Context, organizationID, userID uuid.UUID) ([]*models.APIKey, error) {
 	query := `
-		SELECT id, key_hash, key_prefix, name, user_id, scopes,
+		SELECT id, organization_id, key_hash, key_prefix, name, user_id, scopes,
 		       is_active, last_used_at, expires_at, created_at, created_by
 		FROM api_keys
-		WHERE user_id = $1
+		WHERE organization_id = $1 AND user_id = $2
 		ORDER BY created_at DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list API keys: %w", err)
 	}
@@ -121,7 +121,41 @@ func (r *APIKeyRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]
 		apiKey := &models.APIKey{}
 		var scopes pq.StringArray
 		err := rows.Scan(
-			&apiKey.ID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
+			&apiKey.ID, &apiKey.OrganizationID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
+			&apiKey.UserID, &scopes, &apiKey.IsActive,
+			&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt, &apiKey.CreatedBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan API key: %w", err)
+		}
+		apiKey.Scopes = scopes
+		apiKeys = append(apiKeys, apiKey)
+	}
+
+	return apiKeys, nil
+}
+
+// ListByOrganization retrieves all API keys for an organization
+func (r *APIKeyRepository) ListByOrganization(ctx context.Context, organizationID uuid.UUID) ([]*models.APIKey, error) {
+	query := `
+		SELECT id, organization_id, key_hash, key_prefix, name, user_id, scopes,
+		       is_active, last_used_at, expires_at, created_at, created_by
+		FROM api_keys
+		WHERE organization_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list API keys: %w", err)
+	}
+	defer rows.Close()
+
+	var apiKeys []*models.APIKey
+	for rows.Next() {
+		apiKey := &models.APIKey{}
+		var scopes pq.StringArray
+		err := rows.Scan(
+			&apiKey.ID, &apiKey.OrganizationID, &apiKey.KeyHash, &apiKey.KeyPrefix, &apiKey.Name,
 			&apiKey.UserID, &scopes, &apiKey.IsActive,
 			&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt, &apiKey.CreatedBy,
 		)
@@ -136,13 +170,13 @@ func (r *APIKeyRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]
 }
 
 // UpdateLastUsed updates the last used timestamp
-func (r *APIKeyRepository) UpdateLastUsed(ctx context.Context, id uuid.UUID) error {
+func (r *APIKeyRepository) UpdateLastUsed(ctx context.Context, organizationID, id uuid.UUID) error {
 	query := `
 		UPDATE api_keys
-		SET last_used_at = $1
-		WHERE id = $2`
+		SET last_used_at = $3
+		WHERE organization_id = $1 AND id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, time.Now(), id)
+	result, err := r.db.ExecContext(ctx, query, organizationID, id, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update last used: %w", err)
 	}
@@ -159,14 +193,14 @@ func (r *APIKeyRepository) UpdateLastUsed(ctx context.Context, id uuid.UUID) err
 	return nil
 }
 
-// Revoke revokes an API key (sets is_active to false)
-func (r *APIKeyRepository) Revoke(ctx context.Context, id uuid.UUID) error {
+// Revoke revokes an API key (sets is_active to false) within an organization
+func (r *APIKeyRepository) Revoke(ctx context.Context, organizationID, id uuid.UUID) error {
 	query := `
 		UPDATE api_keys
 		SET is_active = false
-		WHERE id = $1`
+		WHERE organization_id = $1 AND id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, organizationID, id)
 	if err != nil {
 		return fmt.Errorf("failed to revoke API key: %w", err)
 	}
@@ -183,11 +217,11 @@ func (r *APIKeyRepository) Revoke(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// Delete deletes an API key
-func (r *APIKeyRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM api_keys WHERE id = $1`
+// Delete deletes an API key within an organization
+func (r *APIKeyRepository) Delete(ctx context.Context, organizationID, id uuid.UUID) error {
+	query := `DELETE FROM api_keys WHERE organization_id = $1 AND id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, organizationID, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
@@ -205,6 +239,7 @@ func (r *APIKeyRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // RefreshTokenRepository handles refresh token database operations
+// Note: Refresh tokens are user-scoped, not organization-scoped
 type RefreshTokenRepository struct {
 	db *sql.DB
 }

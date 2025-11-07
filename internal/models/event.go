@@ -9,6 +9,7 @@ import (
 // Event represents an event that triggers workflows
 type Event struct {
 	ID                 uuid.UUID  `json:"id" db:"id"`
+	OrganizationID     uuid.UUID  `json:"organization_id" db:"organization_id"`
 	EventID            string     `json:"event_id" db:"event_id"`
 	EventType          string     `json:"event_type" db:"event_type"`
 	Source             string     `json:"source" db:"source"`
@@ -38,6 +39,7 @@ const (
 // ApprovalRequest represents an approval request
 type ApprovalRequest struct {
 	ID             uuid.UUID      `json:"id" db:"id"`
+	OrganizationID uuid.UUID      `json:"organization_id" db:"organization_id"`
 	RequestID      string         `json:"request_id" db:"request_id"`
 	ExecutionID    uuid.UUID      `json:"execution_id" db:"execution_id"`
 	EntityType     string         `json:"entity_type" db:"entity_type"`
@@ -61,23 +63,25 @@ type ApprovalDecisionRequest struct {
 
 // ContextCache represents cached context data
 type ContextCache struct {
-	ID         uuid.UUID  `json:"id" db:"id"`
-	CacheKey   string     `json:"cache_key" db:"cache_key"`
-	EntityType string     `json:"entity_type" db:"entity_type"`
-	EntityID   string     `json:"entity_id" db:"entity_id"`
-	Data       JSONB      `json:"data" db:"data"`
-	CachedAt   time.Time  `json:"cached_at" db:"cached_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty" db:"expires_at"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id" db:"organization_id"`
+	CacheKey       string     `json:"cache_key" db:"cache_key"`
+	EntityType     string     `json:"entity_type" db:"entity_type"`
+	EntityID       string     `json:"entity_id" db:"entity_id"`
+	Data           JSONB      `json:"data" db:"data"`
+	CachedAt       time.Time  `json:"cached_at" db:"cached_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 }
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	ID         uuid.UUID `json:"id" db:"id"`
-	EntityType string    `json:"entity_type" db:"entity_type"`
-	EntityID   uuid.UUID `json:"entity_id" db:"entity_id"`
-	Action     string    `json:"action" db:"action"`
-	ActorID    uuid.UUID `json:"actor_id" db:"actor_id"`
-	ActorType  string    `json:"actor_type" db:"actor_type"` // user, ai_agent, system
-	Changes    JSONB     `json:"changes" db:"changes"`
-	Timestamp  time.Time `json:"timestamp" db:"timestamp"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID *uuid.UUID `json:"organization_id,omitempty" db:"organization_id"` // Nullable for system-level audits
+	EntityType     string     `json:"entity_type" db:"entity_type"`
+	EntityID       uuid.UUID  `json:"entity_id" db:"entity_id"`
+	Action         string     `json:"action" db:"action"`
+	ActorID        uuid.UUID  `json:"actor_id" db:"actor_id"`
+	ActorType      string     `json:"actor_type" db:"actor_type"` // user, ai_agent, system
+	Changes        JSONB      `json:"changes" db:"changes"`
+	Timestamp      time.Time  `json:"timestamp" db:"timestamp"`
 }

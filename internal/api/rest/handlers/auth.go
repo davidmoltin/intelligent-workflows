@@ -199,7 +199,7 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKeyResp, err := h.authService.CreateAPIKey(r.Context(), claims.UserID, &req)
+	apiKeyResp, err := h.authService.CreateAPIKey(r.Context(), claims.OrganizationID, claims.UserID, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to create API key", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to create API key")

@@ -62,17 +62,18 @@ type RolePermission struct {
 
 // APIKey represents an API key for agent authentication
 type APIKey struct {
-	ID         uuid.UUID      `json:"id" db:"id"`
-	KeyHash    string         `json:"-" db:"key_hash"` // Never expose
-	KeyPrefix  string         `json:"key_prefix" db:"key_prefix"`
-	Name       string         `json:"name" db:"name"`
-	UserID     uuid.UUID      `json:"user_id" db:"user_id"`
-	Scopes     pq.StringArray `json:"scopes" db:"scopes"`
-	IsActive   bool           `json:"is_active" db:"is_active"`
-	LastUsedAt *time.Time     `json:"last_used_at,omitempty" db:"last_used_at"`
-	ExpiresAt  *time.Time     `json:"expires_at,omitempty" db:"expires_at"`
-	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
-	CreatedBy  *uuid.UUID     `json:"created_by,omitempty" db:"created_by"`
+	ID             uuid.UUID      `json:"id" db:"id"`
+	OrganizationID uuid.UUID      `json:"organization_id" db:"organization_id"`
+	KeyHash        string         `json:"-" db:"key_hash"` // Never expose
+	KeyPrefix      string         `json:"key_prefix" db:"key_prefix"`
+	Name           string         `json:"name" db:"name"`
+	UserID         uuid.UUID      `json:"user_id" db:"user_id"`
+	Scopes         pq.StringArray `json:"scopes" db:"scopes"`
+	IsActive       bool           `json:"is_active" db:"is_active"`
+	LastUsedAt     *time.Time     `json:"last_used_at,omitempty" db:"last_used_at"`
+	ExpiresAt      *time.Time     `json:"expires_at,omitempty" db:"expires_at"`
+	CreatedAt      time.Time      `json:"created_at" db:"created_at"`
+	CreatedBy      *uuid.UUID     `json:"created_by,omitempty" db:"created_by"`
 }
 
 // RefreshToken represents a JWT refresh token
@@ -173,11 +174,12 @@ type AssignRoleRequest struct {
 
 // Claims represents JWT token claims
 type Claims struct {
-	UserID      uuid.UUID `json:"user_id"`
-	Username    string    `json:"username"`
-	Email       string    `json:"email"`
-	Roles       []string  `json:"roles"`
-	Permissions []string  `json:"permissions"`
+	UserID         uuid.UUID `json:"user_id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Username       string    `json:"username"`
+	Email          string    `json:"email"`
+	Roles          []string  `json:"roles"`
+	Permissions    []string  `json:"permissions"`
 }
 
 // TokenPair represents an access and refresh token pair

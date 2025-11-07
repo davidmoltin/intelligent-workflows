@@ -25,13 +25,13 @@ func NewAuditRepository(db *sql.DB) *AuditRepository {
 func (r *AuditRepository) CreateAuditLog(ctx context.Context, log *models.AuditLog) error {
 	query := `
 		INSERT INTO audit_log (
-			id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, timestamp`
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		log.ID, log.EntityType, log.EntityID, log.Action,
+		log.ID, log.OrganizationID, log.EntityType, log.EntityID, log.Action,
 		log.ActorID, log.ActorType, log.Changes, log.Timestamp,
 	).Scan(&log.ID, &log.Timestamp)
 
@@ -42,18 +42,34 @@ func (r *AuditRepository) CreateAuditLog(ctx context.Context, log *models.AuditL
 	return nil
 }
 
-// GetAuditLogByID retrieves an audit log by ID
-func (r *AuditRepository) GetAuditLogByID(ctx context.Context, id uuid.UUID) (*models.AuditLog, error) {
+// GetAuditLogByID retrieves an audit log by ID within an organization
+// Pass nil for organizationID to query system-level audit logs
+func (r *AuditRepository) GetAuditLogByID(ctx context.Context, organizationID *uuid.UUID, id uuid.UUID) (*models.AuditLog, error) {
 	log := &models.AuditLog{}
-	query := `
-		SELECT id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
-		FROM audit_log
-		WHERE id = $1`
+	var query string
+	var err error
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&log.ID, &log.EntityType, &log.EntityID, &log.Action,
-		&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
-	)
+	if organizationID == nil {
+		// Query system-level audit logs (organization_id IS NULL)
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE id = $1 AND organization_id IS NULL`
+		err = r.db.QueryRowContext(ctx, query, id).Scan(
+			&log.ID, &log.OrganizationID, &log.EntityType, &log.EntityID, &log.Action,
+			&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
+		)
+	} else {
+		// Query organization-scoped audit logs
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE organization_id = $1 AND id = $2`
+		err = r.db.QueryRowContext(ctx, query, organizationID, id).Scan(
+			&log.ID, &log.OrganizationID, &log.EntityType, &log.EntityID, &log.Action,
+			&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
+		)
+	}
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("audit log not found")
@@ -76,9 +92,11 @@ type AuditLogFilters struct {
 	EndTime    *time.Time
 }
 
-// ListAuditLogs retrieves audit logs with pagination and filters
+// ListAuditLogs retrieves audit logs with pagination and filters within an organization
+// Pass nil for organizationID to query system-level audit logs
 func (r *AuditRepository) ListAuditLogs(
 	ctx context.Context,
+	organizationID *uuid.UUID,
 	filters *AuditLogFilters,
 	limit, offset int,
 ) ([]models.AuditLog, int64, error) {
@@ -86,6 +104,15 @@ func (r *AuditRepository) ListAuditLogs(
 	whereClauses := []string{}
 	args := []interface{}{}
 	argPos := 1
+
+	// Add organization filter
+	if organizationID == nil {
+		whereClauses = append(whereClauses, "organization_id IS NULL")
+	} else {
+		whereClauses = append(whereClauses, fmt.Sprintf("organization_id = $%d", argPos))
+		args = append(args, *organizationID)
+		argPos++
+	}
 
 	if filters != nil {
 		if filters.EntityType != nil {
@@ -140,7 +167,7 @@ func (r *AuditRepository) ListAuditLogs(
 
 	// Get audit logs
 	query := fmt.Sprintf(`
-		SELECT id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+		SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
 		FROM audit_log
 		%s
 		ORDER BY timestamp DESC
@@ -158,7 +185,7 @@ func (r *AuditRepository) ListAuditLogs(
 	for rows.Next() {
 		log := models.AuditLog{}
 		err := rows.Scan(
-			&log.ID, &log.EntityType, &log.EntityID, &log.Action,
+			&log.ID, &log.OrganizationID, &log.EntityType, &log.EntityID, &log.Action,
 			&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
 		)
 		if err != nil {
@@ -170,21 +197,37 @@ func (r *AuditRepository) ListAuditLogs(
 	return logs, total, nil
 }
 
-// GetAuditLogsByEntity retrieves all audit logs for a specific entity
+// GetAuditLogsByEntity retrieves all audit logs for a specific entity within an organization
+// Pass nil for organizationID to query system-level audit logs
 func (r *AuditRepository) GetAuditLogsByEntity(
 	ctx context.Context,
+	organizationID *uuid.UUID,
 	entityType string,
 	entityID uuid.UUID,
 	limit, offset int,
 ) ([]models.AuditLog, error) {
-	query := `
-		SELECT id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
-		FROM audit_log
-		WHERE entity_type = $1 AND entity_id = $2
-		ORDER BY timestamp DESC
-		LIMIT $3 OFFSET $4`
+	var query string
+	var rows *sql.Rows
+	var err error
 
-	rows, err := r.db.QueryContext(ctx, query, entityType, entityID, limit, offset)
+	if organizationID == nil {
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE organization_id IS NULL AND entity_type = $1 AND entity_id = $2
+			ORDER BY timestamp DESC
+			LIMIT $3 OFFSET $4`
+		rows, err = r.db.QueryContext(ctx, query, entityType, entityID, limit, offset)
+	} else {
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
+			ORDER BY timestamp DESC
+			LIMIT $4 OFFSET $5`
+		rows, err = r.db.QueryContext(ctx, query, organizationID, entityType, entityID, limit, offset)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by entity: %w", err)
 	}
@@ -194,7 +237,7 @@ func (r *AuditRepository) GetAuditLogsByEntity(
 	for rows.Next() {
 		log := models.AuditLog{}
 		err := rows.Scan(
-			&log.ID, &log.EntityType, &log.EntityID, &log.Action,
+			&log.ID, &log.OrganizationID, &log.EntityType, &log.EntityID, &log.Action,
 			&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
 		)
 		if err != nil {
@@ -206,20 +249,36 @@ func (r *AuditRepository) GetAuditLogsByEntity(
 	return logs, nil
 }
 
-// GetAuditLogsByActor retrieves all audit logs by a specific actor
+// GetAuditLogsByActor retrieves all audit logs by a specific actor within an organization
+// Pass nil for organizationID to query system-level audit logs
 func (r *AuditRepository) GetAuditLogsByActor(
 	ctx context.Context,
+	organizationID *uuid.UUID,
 	actorID uuid.UUID,
 	limit, offset int,
 ) ([]models.AuditLog, error) {
-	query := `
-		SELECT id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
-		FROM audit_log
-		WHERE actor_id = $1
-		ORDER BY timestamp DESC
-		LIMIT $2 OFFSET $3`
+	var query string
+	var rows *sql.Rows
+	var err error
 
-	rows, err := r.db.QueryContext(ctx, query, actorID, limit, offset)
+	if organizationID == nil {
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE organization_id IS NULL AND actor_id = $1
+			ORDER BY timestamp DESC
+			LIMIT $2 OFFSET $3`
+		rows, err = r.db.QueryContext(ctx, query, actorID, limit, offset)
+	} else {
+		query = `
+			SELECT id, organization_id, entity_type, entity_id, action, actor_id, actor_type, changes, timestamp
+			FROM audit_log
+			WHERE organization_id = $1 AND actor_id = $2
+			ORDER BY timestamp DESC
+			LIMIT $3 OFFSET $4`
+		rows, err = r.db.QueryContext(ctx, query, organizationID, actorID, limit, offset)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get audit logs by actor: %w", err)
 	}
@@ -229,7 +288,7 @@ func (r *AuditRepository) GetAuditLogsByActor(
 	for rows.Next() {
 		log := models.AuditLog{}
 		err := rows.Scan(
-			&log.ID, &log.EntityType, &log.EntityID, &log.Action,
+			&log.ID, &log.OrganizationID, &log.EntityType, &log.EntityID, &log.Action,
 			&log.ActorID, &log.ActorType, &log.Changes, &log.Timestamp,
 		)
 		if err != nil {

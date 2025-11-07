@@ -24,14 +24,14 @@ func NewEventRepository(db *sql.DB) *EventRepository {
 func (r *EventRepository) CreateEvent(ctx context.Context, event *models.Event) error {
 	query := `
 		INSERT INTO events (
-			id, event_id, event_type, source, payload,
+			id, organization_id, event_id, event_type, source, payload,
 			triggered_workflows, received_at, processed_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, received_at`
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		event.ID, event.EventID, event.EventType, event.Source,
+		event.ID, event.OrganizationID, event.EventID, event.EventType, event.Source,
 		event.Payload, pq.Array(event.TriggeredWorkflows),
 		event.ReceivedAt, event.ProcessedAt,
 	).Scan(&event.ID, &event.ReceivedAt)
@@ -44,16 +44,16 @@ func (r *EventRepository) CreateEvent(ctx context.Context, event *models.Event) 
 }
 
 // UpdateEvent updates an event
-func (r *EventRepository) UpdateEvent(ctx context.Context, event *models.Event) error {
+func (r *EventRepository) UpdateEvent(ctx context.Context, organizationID uuid.UUID, event *models.Event) error {
 	query := `
 		UPDATE events
-		SET triggered_workflows = $2,
-		    processed_at = $3
-		WHERE id = $1`
+		SET triggered_workflows = $3,
+		    processed_at = $4
+		WHERE organization_id = $1 AND id = $2`
 
 	result, err := r.db.ExecContext(
 		ctx, query,
-		event.ID, pq.Array(event.TriggeredWorkflows), event.ProcessedAt,
+		organizationID, event.ID, pq.Array(event.TriggeredWorkflows), event.ProcessedAt,
 	)
 
 	if err != nil {
@@ -72,18 +72,18 @@ func (r *EventRepository) UpdateEvent(ctx context.Context, event *models.Event) 
 	return nil
 }
 
-// GetEventByID retrieves an event by ID
-func (r *EventRepository) GetEventByID(ctx context.Context, id uuid.UUID) (*models.Event, error) {
+// GetEventByID retrieves an event by ID within an organization
+func (r *EventRepository) GetEventByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Event, error) {
 	event := &models.Event{}
 	query := `
-		SELECT id, event_id, event_type, source, payload,
+		SELECT id, organization_id, event_id, event_type, source, payload,
 		       triggered_workflows, received_at, processed_at
 		FROM events
-		WHERE id = $1`
+		WHERE organization_id = $1 AND id = $2`
 
 	var triggeredWorkflows pq.StringArray
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&event.ID, &event.EventID, &event.EventType, &event.Source,
+	err := r.db.QueryRowContext(ctx, query, organizationID, id).Scan(
+		&event.ID, &event.OrganizationID, &event.EventID, &event.EventType, &event.Source,
 		&event.Payload, &triggeredWorkflows, &event.ReceivedAt,
 		&event.ProcessedAt,
 	)
@@ -99,9 +99,10 @@ func (r *EventRepository) GetEventByID(ctx context.Context, id uuid.UUID) (*mode
 	return event, nil
 }
 
-// ListEvents retrieves events with pagination and filters
+// ListEvents retrieves events with pagination and filters within an organization
 func (r *EventRepository) ListEvents(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	eventType *string,
 	processed *bool,
 	limit, offset int,
@@ -110,26 +111,28 @@ func (r *EventRepository) ListEvents(
 	countQuery := `
 		SELECT COUNT(*)
 		FROM events
-		WHERE ($1::varchar IS NULL OR event_type = $1)
-		  AND ($2::boolean IS NULL OR (processed_at IS NOT NULL) = $2)`
+		WHERE organization_id = $1
+		  AND ($2::varchar IS NULL OR event_type = $2)
+		  AND ($3::boolean IS NULL OR (processed_at IS NOT NULL) = $3)`
 
 	var total int64
-	err := r.db.QueryRowContext(ctx, countQuery, eventType, processed).Scan(&total)
+	err := r.db.QueryRowContext(ctx, countQuery, organizationID, eventType, processed).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count events: %w", err)
 	}
 
 	// Get events
 	query := `
-		SELECT id, event_id, event_type, source, payload,
+		SELECT id, organization_id, event_id, event_type, source, payload,
 		       triggered_workflows, received_at, processed_at
 		FROM events
-		WHERE ($1::varchar IS NULL OR event_type = $1)
-		  AND ($2::boolean IS NULL OR (processed_at IS NOT NULL) = $2)
+		WHERE organization_id = $1
+		  AND ($2::varchar IS NULL OR event_type = $2)
+		  AND ($3::boolean IS NULL OR (processed_at IS NOT NULL) = $3)
 		ORDER BY received_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $4 OFFSET $5`
 
-	rows, err := r.db.QueryContext(ctx, query, eventType, processed, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, eventType, processed, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list events: %w", err)
 	}
@@ -140,7 +143,7 @@ func (r *EventRepository) ListEvents(
 		event := models.Event{}
 		var triggeredWorkflows pq.StringArray
 		err := rows.Scan(
-			&event.ID, &event.EventID, &event.EventType, &event.Source,
+			&event.ID, &event.OrganizationID, &event.EventID, &event.EventType, &event.Source,
 			&event.Payload, &triggeredWorkflows, &event.ReceivedAt,
 			&event.ProcessedAt,
 		)

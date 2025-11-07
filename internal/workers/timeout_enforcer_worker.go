@@ -132,10 +132,10 @@ func (w *TimeoutEnforcerWorker) failTimedOutExecution(ctx context.Context, execu
 	}
 	execution.ErrorMessage = &errorMsg
 
-	if err := w.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := w.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		return err
 	}
 
-	w.logger.Infof("Successfully failed timed-out execution: %s", execution.ExecutionID)
+	w.logger.Infof("Successfully failed timed-out execution: %s (organization: %s)", execution.ExecutionID, execution.OrganizationID)
 	return nil
 }
