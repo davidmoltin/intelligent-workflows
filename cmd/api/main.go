@@ -94,7 +94,7 @@ func run() error {
 	log.Info("WebSocket hub initialized")
 
 	// Initialize workflow engine components
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, wsHub, log, metricsRegistry)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, wsHub, log, metricsRegistry, &cfg.ContextEnrichment)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service

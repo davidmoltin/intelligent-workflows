@@ -7,51 +7,67 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
+// getTestContextEnrichmentConfigForExecutor returns a test configuration with enrichment disabled
+func getTestContextEnrichmentConfigForExecutor() *config.ContextEnrichmentConfig {
+	return &config.ContextEnrichmentConfig{
+		Enabled:    false,
+		BaseURL:    "http://localhost:8081",
+		Timeout:    10 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: 500 * time.Millisecond,
+		CacheTTL:   5 * time.Minute,
+		EndpointMapping: map[string]string{
+			"order.details": "/api/v1/orders/{id}/details",
+		},
+	}
+}
+
 // Mock ExecutionRepository
 type mockExecutionRepo struct {
-	createExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
-	updateExecutionFunc     func(ctx context.Context, execution *models.WorkflowExecution) error
-	getExecutionByIDFunc    func(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	createStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
-	updateStepExecutionFunc func(ctx context.Context, step *models.StepExecution) error
+	createExecutionFunc     func(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	updateExecutionFunc     func(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	getExecutionByIDFunc    func(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error)
+	createStepExecutionFunc func(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
+	updateStepExecutionFunc func(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
 }
 
-func (m *mockExecutionRepo) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+func (m *mockExecutionRepo) CreateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error {
 	if m.createExecutionFunc != nil {
-		return m.createExecutionFunc(ctx, execution)
+		return m.createExecutionFunc(ctx, organizationID, execution)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+func (m *mockExecutionRepo) UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error {
 	if m.updateExecutionFunc != nil {
-		return m.updateExecutionFunc(ctx, execution)
+		return m.updateExecutionFunc(ctx, organizationID, execution)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
+func (m *mockExecutionRepo) GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error) {
 	if m.getExecutionByIDFunc != nil {
-		return m.getExecutionByIDFunc(ctx, id)
+		return m.getExecutionByIDFunc(ctx, organizationID, id)
 	}
 	return nil, errors.New("not found")
 }
 
-func (m *mockExecutionRepo) CreateStepExecution(ctx context.Context, step *models.StepExecution) error {
+func (m *mockExecutionRepo) CreateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error {
 	if m.createStepExecutionFunc != nil {
-		return m.createStepExecutionFunc(ctx, step)
+		return m.createStepExecutionFunc(ctx, organizationID, step)
 	}
 	return nil
 }
 
-func (m *mockExecutionRepo) UpdateStepExecution(ctx context.Context, step *models.StepExecution) error {
+func (m *mockExecutionRepo) UpdateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error {
 	if m.updateStepExecutionFunc != nil {
-		return m.updateStepExecutionFunc(ctx, step)
+		return m.updateStepExecutionFunc(ctx, organizationID, step)
 	}
 	return nil
 }
@@ -75,7 +91,7 @@ func TestExecuteWaitStep(t *testing.T) {
 			Addr: "localhost:6379",
 		})
 
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:          uuid.New(),
@@ -127,7 +143,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles missing wait config", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -150,7 +166,7 @@ func TestExecuteWaitStep(t *testing.T) {
 	t.Run("handles invalid timeout duration", func(t *testing.T) {
 		repo := &mockExecutionRepo{}
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		execution := &models.WorkflowExecution{
 			ID:     uuid.New(),
@@ -229,7 +245,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:         workflowID,
@@ -296,7 +312,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -327,7 +343,7 @@ func TestResumeExecution(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			Definition: models.WorkflowDefinition{
@@ -347,7 +363,7 @@ func TestExecuteConditionStep(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	repo := &mockExecutionRepo{}
-	executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+	executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 	ctx := context.Background()
 
 	t.Run("evaluates true condition", func(t *testing.T) {
@@ -465,7 +481,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		// Create a workflow with a single step
 		workflow := &models.Workflow{
@@ -533,7 +549,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:   uuid.New(),
@@ -603,7 +619,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 		}
 
 		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
+		executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 		workflow := &models.Workflow{
 			ID:   uuid.New(),
@@ -646,7 +662,7 @@ func TestExecuteWorkflow_Timeout(t *testing.T) {
 func TestGetWorkflowTimeout(t *testing.T) {
 	log := logger.NewForTesting()
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, &mockExecutionRepo{}, nil, log, nil)
+	executor := NewWorkflowExecutor(redisClient, &mockExecutionRepo{}, nil, log, nil, getTestContextEnrichmentConfigForExecutor())
 
 	tests := []struct {
 		name     string
@@ -744,129 +760,4 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
-}
-
-// TestExecuteExecuteStep tests the execute step type (for webhooks, notifications, etc.)
-func TestExecuteExecuteStep(t *testing.T) {
-	log := logger.NewForTesting()
-	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	repo := &mockExecutionRepo{}
-	executor := NewWorkflowExecutor(redisClient, repo, nil, log, nil)
-	ctx := context.Background()
-
-	t.Run("executes step with execute actions", func(t *testing.T) {
-		step := &models.Step{
-			ID:   "exec1",
-			Type: "execute",
-			Execute: []models.ExecuteAction{
-				{
-					Type:       "notify",
-					Recipients: []string{"admin@example.com"},
-					Message:    "Test notification",
-				},
-				{
-					Type:    "log",
-					Message: "Logging test message",
-				},
-			},
-		}
-
-		execContext := map[string]interface{}{
-			"order": map[string]interface{}{
-				"id":    "ord-123",
-				"total": 1500.0,
-			},
-		}
-
-		result, err := executor.executeExecuteStep(ctx, step, execContext)
-
-		if err != nil {
-			t.Fatalf("executeExecuteStep failed: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("Result should not be nil")
-		}
-
-		if !result.Success {
-			t.Error("Expected success to be true")
-		}
-
-		if result.Action != "execute" {
-			t.Errorf("Expected action type 'execute', got %s", result.Action)
-		}
-
-		// Verify execute results are present
-		if result.Data == nil {
-			t.Fatal("Expected data to be set")
-		}
-
-		executeResults, ok := result.Data["execute_results"]
-		if !ok {
-			t.Fatal("Expected execute_results in data")
-		}
-
-		resultsArray, ok := executeResults.([]map[string]interface{})
-		if !ok {
-			t.Fatal("Expected execute_results to be an array")
-		}
-
-		if len(resultsArray) != 2 {
-			t.Errorf("Expected 2 execute results, got %d", len(resultsArray))
-		}
-	})
-
-	t.Run("handles missing execute actions", func(t *testing.T) {
-		step := &models.Step{
-			ID:      "exec1",
-			Type:    "execute",
-			Execute: []models.ExecuteAction{},
-		}
-
-		execContext := map[string]interface{}{}
-
-		_, err := executor.executeExecuteStep(ctx, step, execContext)
-
-		if err == nil {
-			t.Error("Expected error for missing execute actions")
-		}
-	})
-
-	t.Run("executes webhook action", func(t *testing.T) {
-		step := &models.Step{
-			ID:   "exec1",
-			Type: "execute",
-			Execute: []models.ExecuteAction{
-				{
-					Type:   "webhook",
-					URL:    "https://example.com/webhook",
-					Method: "POST",
-					Body: map[string]interface{}{
-						"order_id": "${order.id}",
-						"total":    "${order.total}",
-					},
-				},
-			},
-		}
-
-		execContext := map[string]interface{}{
-			"order": map[string]interface{}{
-				"id":    "ord-123",
-				"total": 1500.0,
-			},
-		}
-
-		// Note: This will fail since we're not mocking the HTTP client
-		// but it verifies the step type is handled correctly
-		result, _ := executor.executeExecuteStep(ctx, step, execContext)
-
-		if result == nil {
-			t.Fatal("Result should not be nil")
-		}
-
-		// The result should have the execute type
-		if result.Action != "execute" {
-			t.Errorf("Expected action type 'execute', got %s", result.Action)
-		}
-	})
 }

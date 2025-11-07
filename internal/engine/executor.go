@@ -8,6 +8,7 @@ import (
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/websocket"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/google/uuid"
@@ -46,10 +47,11 @@ func NewWorkflowExecutor(
 	wsHub *websocket.Hub,
 	log *logger.Logger,
 	m *metrics.Metrics,
+	contextEnrichmentCfg *config.ContextEnrichmentConfig,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		evaluator:      NewEvaluator(),
-		contextBuilder: NewContextBuilder(redis, log),
+		contextBuilder: NewContextBuilder(redis, log, contextEnrichmentCfg),
 		actionExecutor: NewActionExecutor(log),
 		executionRepo:  executionRepo,
 		workflowRepo:   workflowRepo,
@@ -123,7 +125,7 @@ func (we *WorkflowExecutor) Execute(
 	we.broadcastExecutionEvent(execution)
 
 	// Build execution context
-	execContext, err := we.contextBuilder.BuildContext(ctx, triggerPayload, workflow.Definition.Context)
+	execContext, err := we.contextBuilder.BuildContext(ctx, workflow.OrganizationID, triggerPayload, workflow.Definition.Context)
 	if err != nil {
 		we.logger.Errorf("Failed to build context: %v", err)
 		we.completeExecution(ctx, execution, models.ExecutionResultFailed, fmt.Sprintf("Context build failed: %v", err))
@@ -610,7 +612,7 @@ func (we *WorkflowExecutor) ResumeExecution(
 	}
 
 	// Reload context data from sources to ensure freshness
-	if err := we.contextBuilder.BuildContextFromExisting(ctx, execContext, workflow.Definition.Context); err != nil {
+	if err := we.contextBuilder.BuildContextFromExisting(ctx, workflow.OrganizationID, execContext, workflow.Definition.Context); err != nil {
 		we.logger.Warnf("Failed to reload context: %v", err)
 		// Continue with existing context
 	}
