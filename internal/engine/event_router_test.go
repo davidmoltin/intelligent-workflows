@@ -7,55 +7,71 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
-// Mock WorkflowRepository for testing
-type mockWorkflowRepo struct {
-	getByIDFunc   func(ctx context.Context, id uuid.UUID) (*models.Workflow, error)
-	listFunc      func(ctx context.Context, enabled *bool, limit, offset int) ([]models.Workflow, int64, error)
+// getTestContextEnrichmentConfigForEventRouter returns a test configuration with enrichment disabled
+func getTestContextEnrichmentConfigForEventRouter() *config.ContextEnrichmentConfig {
+	return &config.ContextEnrichmentConfig{
+		Enabled:    false,
+		BaseURL:    "http://localhost:8081",
+		Timeout:    10 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: 500 * time.Millisecond,
+		CacheTTL:   5 * time.Minute,
+		EndpointMapping: map[string]string{
+			"order.details": "/api/v1/orders/{id}/details",
+		},
+	}
 }
 
-func (m *mockWorkflowRepo) GetWorkflowByID(ctx context.Context, id uuid.UUID) (*models.Workflow, error) {
+// Mock WorkflowRepository for testing
+type mockWorkflowRepo struct {
+	getByIDFunc   func(ctx context.Context, organizationID, id uuid.UUID) (*models.Workflow, error)
+	listFunc      func(ctx context.Context, organizationID uuid.UUID, enabled *bool, limit, offset int) ([]models.Workflow, int64, error)
+}
+
+func (m *mockWorkflowRepo) GetWorkflowByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Workflow, error) {
 	if m.getByIDFunc != nil {
-		return m.getByIDFunc(ctx, id)
+		return m.getByIDFunc(ctx, organizationID, id)
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *mockWorkflowRepo) ListWorkflows(ctx context.Context, enabled *bool, limit, offset int) ([]models.Workflow, int64, error) {
+func (m *mockWorkflowRepo) ListWorkflows(ctx context.Context, organizationID uuid.UUID, enabled *bool, limit, offset int) ([]models.Workflow, int64, error) {
 	if m.listFunc != nil {
-		return m.listFunc(ctx, enabled, limit, offset)
+		return m.listFunc(ctx, organizationID, enabled, limit, offset)
 	}
 	return []models.Workflow{}, 0, nil
 }
 
 // Mock EventRepository for testing
 type mockEventRepo struct {
-	createFunc   func(ctx context.Context, event *models.Event) error
-	updateFunc   func(ctx context.Context, event *models.Event) error
-	getByIDFunc  func(ctx context.Context, id uuid.UUID) (*models.Event, error)
+	createFunc   func(ctx context.Context, organizationID uuid.UUID, event *models.Event) error
+	updateFunc   func(ctx context.Context, organizationID uuid.UUID, event *models.Event) error
+	getByIDFunc  func(ctx context.Context, organizationID, id uuid.UUID) (*models.Event, error)
 }
 
-func (m *mockEventRepo) CreateEvent(ctx context.Context, event *models.Event) error {
+func (m *mockEventRepo) CreateEvent(ctx context.Context, organizationID uuid.UUID, event *models.Event) error {
 	if m.createFunc != nil {
-		return m.createFunc(ctx, event)
+		return m.createFunc(ctx, organizationID, event)
 	}
 	return nil
 }
 
-func (m *mockEventRepo) UpdateEvent(ctx context.Context, event *models.Event) error {
+func (m *mockEventRepo) UpdateEvent(ctx context.Context, organizationID uuid.UUID, event *models.Event) error {
 	if m.updateFunc != nil {
-		return m.updateFunc(ctx, event)
+		return m.updateFunc(ctx, organizationID, event)
 	}
 	return nil
 }
 
-func (m *mockEventRepo) GetEventByID(ctx context.Context, id uuid.UUID) (*models.Event, error) {
+func (m *mockEventRepo) GetEventByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Event, error) {
 	if m.getByIDFunc != nil {
-		return m.getByIDFunc(ctx, id)
+		return m.getByIDFunc(ctx, organizationID, id)
 	}
 	return nil, fmt.Errorf("not found")
 }
@@ -68,7 +84,7 @@ func TestSafeExecuteWorkflow_NormalExecution(t *testing.T) {
 	workflowRepo := &mockWorkflowRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 
 	eventRepo := &mockEventRepo{}
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
@@ -131,7 +147,7 @@ func TestSafeExecuteWorkflow_PanicRecovery(t *testing.T) {
 
 	// Create an executor that will fail on execution
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 
 	eventRepo := &mockEventRepo{}
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
@@ -202,7 +218,7 @@ func TestRouteEvent_WithWorkflows(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -331,7 +347,7 @@ func TestTriggerWorkflowManually(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -376,7 +392,7 @@ func TestTriggerWorkflowManually_DisabledWorkflow(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
@@ -411,7 +427,7 @@ func TestTriggerWorkflowManually_NotFound(t *testing.T) {
 	eventRepo := &mockEventRepo{}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil)
+	executor := NewWorkflowExecutor(redisClient, executionRepo, workflowRepo, log, nil, getTestContextEnrichmentConfigForEventRouter())
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()

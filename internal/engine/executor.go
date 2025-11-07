@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
+	"github.com/davidmoltin/intelligent-workflows/pkg/config"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 	"github.com/davidmoltin/intelligent-workflows/pkg/metrics"
 	"github.com/google/uuid"
@@ -42,10 +43,11 @@ func NewWorkflowExecutor(
 	workflowRepo WorkflowRepository,
 	log *logger.Logger,
 	m *metrics.Metrics,
+	contextEnrichmentCfg *config.ContextEnrichmentConfig,
 ) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		evaluator:      NewEvaluator(),
-		contextBuilder: NewContextBuilder(redis, log),
+		contextBuilder: NewContextBuilder(redis, log, contextEnrichmentCfg),
 		actionExecutor: NewActionExecutor(log),
 		executionRepo:  executionRepo,
 		workflowRepo:   workflowRepo,
@@ -115,7 +117,7 @@ func (we *WorkflowExecutor) Execute(
 	}
 
 	// Build execution context
-	execContext, err := we.contextBuilder.BuildContext(ctx, triggerPayload, workflow.Definition.Context)
+	execContext, err := we.contextBuilder.BuildContext(ctx, workflow.OrganizationID, triggerPayload, workflow.Definition.Context)
 	if err != nil {
 		we.logger.Errorf("Failed to build context: %v", err)
 		we.completeExecution(ctx, execution, models.ExecutionResultFailed, fmt.Sprintf("Context build failed: %v", err))
@@ -570,7 +572,7 @@ func (we *WorkflowExecutor) ResumeExecution(
 	we.logger.Infof("Resuming workflow execution: %s with event: %s", executionID, resumeEvent)
 
 	// Load execution from database
-	execution, err := we.executionRepo.GetExecutionByID(ctx, executionID)
+	execution, err := we.executionRepo.GetExecutionByID(ctx, uuid.Nil, executionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load execution: %w", err)
 	}
@@ -597,7 +599,7 @@ func (we *WorkflowExecutor) ResumeExecution(
 	}
 
 	// Reload context data from sources to ensure freshness
-	if err := we.contextBuilder.BuildContextFromExisting(ctx, execContext, workflow.Definition.Context); err != nil {
+	if err := we.contextBuilder.BuildContextFromExisting(ctx, workflow.OrganizationID, execContext, workflow.Definition.Context); err != nil {
 		we.logger.Warnf("Failed to reload context: %v", err)
 		// Continue with existing context
 	}
@@ -814,7 +816,7 @@ func (we *WorkflowExecutor) ResumePausedExecution(ctx context.Context, execution
 	}
 
 	// Load workflow definition
-	workflow, err := we.workflowRepo.GetWorkflowByID(ctx, execution.WorkflowID)
+	workflow, err := we.workflowRepo.GetWorkflowByID(ctx, execution.OrganizationID, execution.WorkflowID)
 	if err != nil {
 		return fmt.Errorf("failed to load workflow: %w", err)
 	}

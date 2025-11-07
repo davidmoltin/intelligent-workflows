@@ -9,14 +9,15 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Server       ServerConfig
-	Database     DatabaseConfig
-	Redis        RedisConfig
-	Logger       LoggerConfig
-	App          AppConfig
-	Notification NotificationConfig
-	LLM          LLMConfig
-	Workers      WorkersConfig
+	Server            ServerConfig
+	Database          DatabaseConfig
+	Redis             RedisConfig
+	Logger            LoggerConfig
+	App               AppConfig
+	Notification      NotificationConfig
+	LLM               LLMConfig
+	Workers           WorkersConfig
+	ContextEnrichment ContextEnrichmentConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -105,6 +106,17 @@ type WorkersConfig struct {
 	SchedulerCheckInterval          time.Duration
 }
 
+// ContextEnrichmentConfig holds context enrichment service configuration
+type ContextEnrichmentConfig struct {
+	Enabled         bool
+	BaseURL         string
+	Timeout         time.Duration
+	MaxRetries      int
+	RetryDelay      time.Duration
+	CacheTTL        time.Duration
+	EndpointMapping map[string]string
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -171,6 +183,24 @@ func Load() (*Config, error) {
 			WorkflowResumerCheckInterval:    getEnvAsDuration("WORKER_WORKFLOW_RESUMER_INTERVAL", 1*time.Minute),
 			TimeoutEnforcerCheckInterval:    getEnvAsDuration("WORKER_TIMEOUT_ENFORCER_INTERVAL", 1*time.Minute),
 			SchedulerCheckInterval:          getEnvAsDuration("WORKER_SCHEDULER_INTERVAL", 1*time.Minute),
+		},
+		ContextEnrichment: ContextEnrichmentConfig{
+			Enabled:    getEnvAsBool("CONTEXT_ENRICHMENT_ENABLED", true),
+			BaseURL:    getEnv("CONTEXT_ENRICHMENT_BASE_URL", "http://localhost:8081"),
+			Timeout:    getEnvAsDuration("CONTEXT_ENRICHMENT_TIMEOUT", 10*time.Second),
+			MaxRetries: getEnvAsInt("CONTEXT_ENRICHMENT_MAX_RETRIES", 3),
+			RetryDelay: getEnvAsDuration("CONTEXT_ENRICHMENT_RETRY_DELAY", 500*time.Millisecond),
+			CacheTTL:   getEnvAsDuration("CONTEXT_ENRICHMENT_CACHE_TTL", 5*time.Minute),
+			EndpointMapping: map[string]string{
+				"order.details":      "/api/v1/orders/{id}/details",
+				"customer.history":   "/api/v1/customers/{id}/history",
+				"product.inventory":  "/api/v1/products/{id}/inventory",
+				"payment.status":     "/api/v1/payments/{id}/status",
+				"shipment.tracking":  "/api/v1/shipments/{id}/tracking",
+				"user.preferences":   "/api/v1/users/{id}/preferences",
+				"subscription.info":  "/api/v1/subscriptions/{id}/info",
+				"invoice.details":    "/api/v1/invoices/{id}/details",
+			},
 		},
 	}
 
