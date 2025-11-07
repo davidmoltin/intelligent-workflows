@@ -20,8 +20,8 @@ type ExecutionRepository interface {
 	UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
 	GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error)
 	CreateStepExecution(ctx context.Context, step *models.StepExecution) error
-	UpdateStepExecution(ctx context.Context, step *models.StepExecution) error
-	GetTimedOutExecutions(ctx context.Context, organizationID uuid.UUID, limit int) ([]models.WorkflowExecution, error)
+	UpdateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error
+	GetTimedOutExecutions(ctx context.Context, organizationID uuid.UUID, limit int) ([]*models.WorkflowExecution, error)
 }
 
 // WorkflowExecutor executes workflows
@@ -334,7 +334,7 @@ func (we *WorkflowExecutor) executeStep(
 		StartedAt:      time.Now(),
 	}
 
-	if err := we.executionRepo.CreateStepExecution(ctx, execution.OrganizationID, stepExec); err != nil {
+	if err := we.executionRepo.CreateStepExecution(ctx, stepExec); err != nil {
 		return "", nil, fmt.Errorf("failed to create step execution: %w", err)
 	}
 

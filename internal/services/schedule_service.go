@@ -14,13 +14,13 @@ import (
 // ScheduleRepository defines the interface for schedule data access
 type ScheduleRepository interface {
 	Create(ctx context.Context, schedule *models.WorkflowSchedule) error
-	GetByID(ctx context.Context, id uuid.UUID) (*models.WorkflowSchedule, error)
-	GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error)
-	GetDueSchedules(ctx context.Context) ([]*models.WorkflowSchedule, error)
-	Update(ctx context.Context, schedule *models.WorkflowSchedule) error
-	UpdateNextTrigger(ctx context.Context, id uuid.UUID, lastTriggered, nextTrigger time.Time) error
-	Delete(ctx context.Context, id uuid.UUID) error
-	List(ctx context.Context, limit, offset int) ([]*models.WorkflowSchedule, int64, error)
+	GetByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowSchedule, error)
+	GetByWorkflowID(ctx context.Context, organizationID, workflowID uuid.UUID) ([]*models.WorkflowSchedule, error)
+	GetDueSchedules(ctx context.Context, organizationID uuid.UUID) ([]*models.WorkflowSchedule, error)
+	Update(ctx context.Context, organizationID uuid.UUID, schedule *models.WorkflowSchedule) error
+	UpdateNextTrigger(ctx context.Context, organizationID, id uuid.UUID, lastTriggered, nextTrigger time.Time) error
+	Delete(ctx context.Context, organizationID, id uuid.UUID) error
+	List(ctx context.Context, organizationID uuid.UUID, limit, offset int) ([]*models.WorkflowSchedule, int64, error)
 }
 
 // ScheduleService handles workflow scheduling logic
