@@ -27,6 +27,7 @@ type Handlers struct {
 	Schedule     *ScheduleHandler
 	Audit        *AuditHandler
 	WebSocket    *websocket.Handler
+	Rule         *RuleHandler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -50,6 +51,7 @@ func NewHandlers(
 	aiService *services.AIService,
 	wsHub *websocket.Hub,
 	auditService *services.AuditService,
+	ruleService *services.RuleService,
 	healthCheckers *HealthCheckers,
 	version string,
 ) *Handlers {
@@ -79,6 +81,7 @@ func NewHandlers(
 		Schedule:     NewScheduleHandler(log, scheduleService),
 		Audit:        auditHandler,
 		WebSocket:    websocket.NewHandler(wsHub, log.Logger),
+		Rule:         NewRuleHandler(log, ruleService),
 	}
 }
 

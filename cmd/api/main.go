@@ -84,6 +84,7 @@ func run() error {
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
 	auditRepo := postgres.NewAuditRepository(db.DB)
+	ruleRepo := postgres.NewRuleRepository(db.DB)
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(redis.Client, log.Logger)
@@ -94,7 +95,12 @@ func run() error {
 	log.Info("WebSocket hub initialized")
 
 	// Initialize workflow engine components
+	evaluator := engine.NewEvaluator()
 	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, wsHub, log, metricsRegistry, &cfg.ContextEnrichment)
+
+	// Initialize rule service and connect to executor
+	ruleService := services.NewRuleService(ruleRepo, evaluator, redis, log)
+	executor.SetRuleService(ruleService)
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -203,6 +209,7 @@ func run() error {
 		aiService,
 		wsHub,
 		auditService,
+		ruleService,
 		&handlers.HealthCheckers{
 			DB:    db,
 			Redis: redis,
