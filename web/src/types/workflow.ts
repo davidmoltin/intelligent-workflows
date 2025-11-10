@@ -34,15 +34,18 @@ export interface ContextConfig {
 
 export interface Step {
   id: string
-  type: 'condition' | 'action' | 'execute' | 'parallel' | 'foreach'
+  type: 'condition' | 'action' | 'execute' | 'parallel' | 'foreach' | 'wait'
   name?: string
   condition?: Condition
   action?: Action
   execute?: ExecuteAction[]
   parallel?: ParallelStep
+  foreach?: ForEachStep
+  wait?: WaitConfig
   on_true?: string
   on_false?: string
   next?: string
+  timeout?: string
   metadata?: Record<string, any>
   retry?: RetryConfig
   // Legacy fields for backwards compatibility
@@ -83,6 +86,18 @@ export interface ExecuteAction {
 export interface ParallelStep {
   steps: Step[]
   strategy: 'all_must_pass' | 'any_can_pass' | 'best_effort'
+}
+
+export interface ForEachStep {
+  items: string
+  item_var: string
+  steps: Step[]
+}
+
+export interface WaitConfig {
+  event: string
+  timeout: string
+  on_timeout?: string
 }
 
 export interface RetryConfig {

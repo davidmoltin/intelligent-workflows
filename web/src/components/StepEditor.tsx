@@ -83,6 +83,30 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
     setParallelSteps(updated)
   }
 
+  // ForEach fields
+  const [foreachItems, setForeachItems] = useState(step?.foreach?.items || '')
+  const [foreachItemVar, setForeachItemVar] = useState(step?.foreach?.item_var || '')
+  const [foreachSteps, setForeachSteps] = useState<Step[]>(step?.foreach?.steps || [])
+
+  const handleAddForeachStep = () => {
+    const newStep: Step = {
+      id: `step_${Date.now()}`,
+      type: 'condition',
+      name: 'New Step',
+    }
+    setForeachSteps([...foreachSteps, newStep])
+  }
+
+  const handleRemoveForeachStep = (index: number) => {
+    setForeachSteps(foreachSteps.filter((_, i) => i !== index))
+  }
+
+  const handleUpdateForeachStep = (index: number, updatedStep: Partial<Step>) => {
+    const updated = [...foreachSteps]
+    updated[index] = { ...updated[index], ...updatedStep }
+    setForeachSteps(updated)
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -137,6 +161,12 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
       newStep.parallel = {
         steps: parallelSteps,
         strategy: parallelStrategy,
+      }
+    } else if (stepType === 'foreach') {
+      newStep.foreach = {
+        items: foreachItems,
+        item_var: foreachItemVar,
+        steps: foreachSteps,
       }
     }
 
@@ -565,9 +595,120 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
           {stepType === 'foreach' && (
             <div className="space-y-4 rounded-lg border p-4">
               <h4 className="font-medium">For Each Configuration</h4>
-              <p className="text-sm text-muted-foreground">
-                For Each loop configuration will be available in a future update.
-              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="foreach-items">Items Collection</Label>
+                <Input
+                  id="foreach-items"
+                  placeholder="e.g., {{order.line_items}}"
+                  value={foreachItems}
+                  onChange={(e) => setForeachItems(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variable reference to the collection to iterate over (e.g., {`{{items}}`}, {`{{order.line_items}}`})
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="foreach-item-var">Item Variable Name</Label>
+                <Input
+                  id="foreach-item-var"
+                  placeholder="e.g., item, line_item"
+                  value={foreachItemVar}
+                  onChange={(e) => setForeachItemVar(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variable name to use for each item in the loop (accessible as {`{{item_var_name}}`})
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Loop Steps ({foreachSteps.length})</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddForeachStep}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Step
+                  </Button>
+                </div>
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {foreachSteps.map((fStep, index) => (
+                    <div key={index} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveForeachStep(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-2 grid-cols-2">
+                        <div>
+                          <Label className="text-xs">ID</Label>
+                          <Input
+                            size={1}
+                            value={fStep.id}
+                            onChange={(e) =>
+                              handleUpdateForeachStep(index, { id: e.target.value })
+                            }
+                            placeholder="step_id"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Type</Label>
+                          <Select
+                            value={fStep.type}
+                            onValueChange={(value: any) =>
+                              handleUpdateForeachStep(index, { type: value })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="condition">Condition</SelectItem>
+                              <SelectItem value="action">Action</SelectItem>
+                              <SelectItem value="execute">Execute</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Name (optional)</Label>
+                        <Input
+                          size={1}
+                          className="h-8"
+                          value={fStep.name || ''}
+                          onChange={(e) =>
+                            handleUpdateForeachStep(index, { name: e.target.value })
+                          }
+                          placeholder="Step name"
+                        />
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        Configure full step details by saving and editing in the main workflow builder
+                      </p>
+                    </div>
+                  ))}
+
+                  {foreachSteps.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No loop steps added yet. Click "Add Step" to create one.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
