@@ -198,13 +198,14 @@ func TestRouteEvent_WithWorkflows(t *testing.T) {
 
 	executionRepo := &mockExecutionRepo{}
 	workflowRepo := &mockWorkflowRepo{
-		listFunc: func(ctx context.Context, enabled *bool, limit, offset int) ([]models.Workflow, int64, error) {
+		listFunc: func(ctx context.Context, organizationID uuid.UUID, enabled *bool, limit, offset int) ([]models.Workflow, int64, error) {
 			return []models.Workflow{
 				{
-					ID:         uuid.New(),
-					WorkflowID: "test-workflow",
-					Name:       "Test Workflow",
-					Enabled:    true,
+					ID:             uuid.New(),
+					OrganizationID: organizationID,
+					WorkflowID:     "test-workflow",
+					Name:           "Test Workflow",
+					Enabled:        true,
 					Definition: models.WorkflowDefinition{
 						Trigger: models.TriggerDefinition{
 							Type:  "event",
@@ -224,7 +225,8 @@ func TestRouteEvent_WithWorkflows(t *testing.T) {
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
-	event, err := router.RouteEvent(ctx, "test.event", "test-source", map[string]interface{}{
+	orgID := uuid.New()
+	event, err := router.RouteEvent(ctx, orgID, "test.event", "test-source", map[string]interface{}{
 		"test": "data",
 	})
 
@@ -325,19 +327,21 @@ func TestWorkflowMatchesEvent(t *testing.T) {
 func TestTriggerWorkflowManually(t *testing.T) {
 	log := logger.NewForTesting()
 
+	orgID := uuid.New()
 	workflowID := uuid.New()
 	workflow := &models.Workflow{
-		ID:         workflowID,
-		WorkflowID: "manual-workflow",
-		Name:       "Manual Workflow",
-		Enabled:    true,
+		ID:             workflowID,
+		OrganizationID: orgID,
+		WorkflowID:     "manual-workflow",
+		Name:           "Manual Workflow",
+		Enabled:        true,
 		Definition: models.WorkflowDefinition{
 			Steps: []models.Step{},
 		},
 	}
 
 	workflowRepo := &mockWorkflowRepo{
-		getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.Workflow, error) {
+		getByIDFunc: func(ctx context.Context, organizationID, id uuid.UUID) (*models.Workflow, error) {
 			if id == workflowID {
 				return workflow, nil
 			}
@@ -353,7 +357,7 @@ func TestTriggerWorkflowManually(t *testing.T) {
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
-	execution, err := router.TriggerWorkflowManually(ctx, workflowID, map[string]interface{}{
+	execution, err := router.TriggerWorkflowManually(ctx, orgID, workflowID, map[string]interface{}{
 		"manual": "trigger",
 	})
 
@@ -376,16 +380,18 @@ func TestTriggerWorkflowManually(t *testing.T) {
 func TestTriggerWorkflowManually_DisabledWorkflow(t *testing.T) {
 	log := logger.NewForTesting()
 
+	orgID := uuid.New()
 	workflowID := uuid.New()
 	workflow := &models.Workflow{
-		ID:         workflowID,
-		Name:       "Disabled Workflow",
-		Enabled:    false, // Disabled
-		Definition: models.WorkflowDefinition{},
+		ID:             workflowID,
+		OrganizationID: orgID,
+		Name:           "Disabled Workflow",
+		Enabled:        false, // Disabled
+		Definition:     models.WorkflowDefinition{},
 	}
 
 	workflowRepo := &mockWorkflowRepo{
-		getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.Workflow, error) {
+		getByIDFunc: func(ctx context.Context, organizationID, id uuid.UUID) (*models.Workflow, error) {
 			return workflow, nil
 		},
 	}
@@ -398,7 +404,7 @@ func TestTriggerWorkflowManually_DisabledWorkflow(t *testing.T) {
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
-	execution, err := router.TriggerWorkflowManually(ctx, workflowID, map[string]interface{}{})
+	execution, err := router.TriggerWorkflowManually(ctx, orgID, workflowID, map[string]interface{}{})
 
 	if err == nil {
 		t.Fatal("Expected error when triggering disabled workflow")
@@ -420,7 +426,7 @@ func TestTriggerWorkflowManually_NotFound(t *testing.T) {
 	log := logger.NewForTesting()
 
 	workflowRepo := &mockWorkflowRepo{
-		getByIDFunc: func(ctx context.Context, id uuid.UUID) (*models.Workflow, error) {
+		getByIDFunc: func(ctx context.Context, organizationID, id uuid.UUID) (*models.Workflow, error) {
 			return nil, fmt.Errorf("workflow not found")
 		},
 	}
@@ -433,8 +439,9 @@ func TestTriggerWorkflowManually_NotFound(t *testing.T) {
 	router := NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	ctx := context.Background()
+	orgID := uuid.New()
 	workflowID := uuid.New()
-	execution, err := router.TriggerWorkflowManually(ctx, workflowID, map[string]interface{}{})
+	execution, err := router.TriggerWorkflowManually(ctx, orgID, workflowID, map[string]interface{}{})
 
 	if err == nil {
 		t.Fatal("Expected error when triggering non-existent workflow")
