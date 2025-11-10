@@ -20,21 +20,21 @@ func NewRuleRepository(db *sql.DB) *RuleRepository {
 }
 
 // Create creates a new rule
-func (r *RuleRepository) Create(ctx context.Context, req *models.CreateRuleRequest) (*models.Rule, error) {
+func (r *RuleRepository) Create(ctx context.Context, organizationID uuid.UUID, req *models.CreateRuleRequest) (*models.Rule, error) {
 	query := `
 		INSERT INTO rules (
-			rule_id, name, description, rule_type, definition, enabled
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at`
+			organization_id, rule_id, name, description, rule_type, definition, enabled
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, organization_id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at`
 
 	rule := &models.Rule{}
 	enabled := true
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		req.RuleID, req.Name, req.Description, req.RuleType, req.Definition, enabled,
+		organizationID, req.RuleID, req.Name, req.Description, req.RuleType, req.Definition, enabled,
 	).Scan(
-		&rule.ID, &rule.RuleID, &rule.Name, &rule.Description,
+		&rule.ID, &rule.OrganizationID, &rule.RuleID, &rule.Name, &rule.Description,
 		&rule.RuleType, &rule.Definition, &rule.Enabled,
 		&rule.CreatedAt, &rule.UpdatedAt,
 	)
@@ -47,15 +47,15 @@ func (r *RuleRepository) Create(ctx context.Context, req *models.CreateRuleReque
 }
 
 // GetByID retrieves a rule by UUID
-func (r *RuleRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Rule, error) {
+func (r *RuleRepository) GetByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Rule, error) {
 	query := `
-		SELECT id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
+		SELECT id, organization_id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
 		FROM rules
-		WHERE id = $1`
+		WHERE id = $1 AND organization_id = $2`
 
 	rule := &models.Rule{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&rule.ID, &rule.RuleID, &rule.Name, &rule.Description,
+	err := r.db.QueryRowContext(ctx, query, id, organizationID).Scan(
+		&rule.ID, &rule.OrganizationID, &rule.RuleID, &rule.Name, &rule.Description,
 		&rule.RuleType, &rule.Definition, &rule.Enabled,
 		&rule.CreatedAt, &rule.UpdatedAt,
 	)
@@ -71,15 +71,15 @@ func (r *RuleRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Rul
 }
 
 // GetByRuleID retrieves a rule by its rule_id string
-func (r *RuleRepository) GetByRuleID(ctx context.Context, ruleID string) (*models.Rule, error) {
+func (r *RuleRepository) GetByRuleID(ctx context.Context, organizationID uuid.UUID, ruleID string) (*models.Rule, error) {
 	query := `
-		SELECT id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
+		SELECT id, organization_id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
 		FROM rules
-		WHERE rule_id = $1`
+		WHERE rule_id = $1 AND organization_id = $2`
 
 	rule := &models.Rule{}
-	err := r.db.QueryRowContext(ctx, query, ruleID).Scan(
-		&rule.ID, &rule.RuleID, &rule.Name, &rule.Description,
+	err := r.db.QueryRowContext(ctx, query, ruleID, organizationID).Scan(
+		&rule.ID, &rule.OrganizationID, &rule.RuleID, &rule.Name, &rule.Description,
 		&rule.RuleType, &rule.Definition, &rule.Enabled,
 		&rule.CreatedAt, &rule.UpdatedAt,
 	)
@@ -95,12 +95,13 @@ func (r *RuleRepository) GetByRuleID(ctx context.Context, ruleID string) (*model
 }
 
 // List retrieves rules with optional filtering and pagination
-func (r *RuleRepository) List(ctx context.Context, enabled *bool, ruleType *models.RuleType, limit, offset int) ([]*models.Rule, int64, error) {
+func (r *RuleRepository) List(ctx context.Context, organizationID uuid.UUID, enabled *bool, ruleType *models.RuleType, limit, offset int) ([]*models.Rule, int64, error) {
 	// Count total
 	countQuery := `
 		SELECT COUNT(*) FROM rules
-		WHERE ($1::boolean IS NULL OR enabled = $1)
-		AND ($2::text IS NULL OR rule_type = $2)`
+		WHERE organization_id = $1
+		AND ($2::boolean IS NULL OR enabled = $2)
+		AND ($3::text IS NULL OR rule_type = $3)`
 
 	var total int64
 	var ruleTypeStr *string
@@ -109,21 +110,22 @@ func (r *RuleRepository) List(ctx context.Context, enabled *bool, ruleType *mode
 		ruleTypeStr = &str
 	}
 
-	err := r.db.QueryRowContext(ctx, countQuery, enabled, ruleTypeStr).Scan(&total)
+	err := r.db.QueryRowContext(ctx, countQuery, organizationID, enabled, ruleTypeStr).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count rules: %w", err)
 	}
 
 	// Get rules
 	query := `
-		SELECT id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
+		SELECT id, organization_id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at
 		FROM rules
-		WHERE ($1::boolean IS NULL OR enabled = $1)
-		AND ($2::text IS NULL OR rule_type = $2)
+		WHERE organization_id = $1
+		AND ($2::boolean IS NULL OR enabled = $2)
+		AND ($3::text IS NULL OR rule_type = $3)
 		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $4 OFFSET $5`
 
-	rows, err := r.db.QueryContext(ctx, query, enabled, ruleTypeStr, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, enabled, ruleTypeStr, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list rules: %w", err)
 	}
@@ -133,7 +135,7 @@ func (r *RuleRepository) List(ctx context.Context, enabled *bool, ruleType *mode
 	for rows.Next() {
 		rule := &models.Rule{}
 		err := rows.Scan(
-			&rule.ID, &rule.RuleID, &rule.Name, &rule.Description,
+			&rule.ID, &rule.OrganizationID, &rule.RuleID, &rule.Name, &rule.Description,
 			&rule.RuleType, &rule.Definition, &rule.Enabled,
 			&rule.CreatedAt, &rule.UpdatedAt,
 		)
@@ -147,22 +149,22 @@ func (r *RuleRepository) List(ctx context.Context, enabled *bool, ruleType *mode
 }
 
 // Update updates a rule
-func (r *RuleRepository) Update(ctx context.Context, id uuid.UUID, req *models.UpdateRuleRequest) (*models.Rule, error) {
+func (r *RuleRepository) Update(ctx context.Context, organizationID, id uuid.UUID, req *models.UpdateRuleRequest) (*models.Rule, error) {
 	query := `
 		UPDATE rules
-		SET name = COALESCE($2, name),
-		    description = COALESCE($3, description),
-		    definition = COALESCE($4, definition),
+		SET name = COALESCE($3, name),
+		    description = COALESCE($4, description),
+		    definition = COALESCE($5, definition),
 		    updated_at = NOW()
-		WHERE id = $1
-		RETURNING id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at`
+		WHERE id = $1 AND organization_id = $2
+		RETURNING id, organization_id, rule_id, name, description, rule_type, definition, enabled, created_at, updated_at`
 
 	rule := &models.Rule{}
 	err := r.db.QueryRowContext(
 		ctx, query,
-		id, req.Name, req.Description, req.Definition,
+		id, organizationID, req.Name, req.Description, req.Definition,
 	).Scan(
-		&rule.ID, &rule.RuleID, &rule.Name, &rule.Description,
+		&rule.ID, &rule.OrganizationID, &rule.RuleID, &rule.Name, &rule.Description,
 		&rule.RuleType, &rule.Definition, &rule.Enabled,
 		&rule.CreatedAt, &rule.UpdatedAt,
 	)
@@ -178,9 +180,9 @@ func (r *RuleRepository) Update(ctx context.Context, id uuid.UUID, req *models.U
 }
 
 // Delete deletes a rule
-func (r *RuleRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM rules WHERE id = $1`
-	result, err := r.db.ExecContext(ctx, query, id)
+func (r *RuleRepository) Delete(ctx context.Context, organizationID, id uuid.UUID) error {
+	query := `DELETE FROM rules WHERE id = $1 AND organization_id = $2`
+	result, err := r.db.ExecContext(ctx, query, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("failed to delete rule: %w", err)
 	}
@@ -198,9 +200,9 @@ func (r *RuleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // Enable enables a rule
-func (r *RuleRepository) Enable(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE rules SET enabled = true, updated_at = NOW() WHERE id = $1`
-	result, err := r.db.ExecContext(ctx, query, id)
+func (r *RuleRepository) Enable(ctx context.Context, organizationID, id uuid.UUID) error {
+	query := `UPDATE rules SET enabled = true, updated_at = NOW() WHERE id = $1 AND organization_id = $2`
+	result, err := r.db.ExecContext(ctx, query, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("failed to enable rule: %w", err)
 	}
@@ -218,9 +220,9 @@ func (r *RuleRepository) Enable(ctx context.Context, id uuid.UUID) error {
 }
 
 // Disable disables a rule
-func (r *RuleRepository) Disable(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE rules SET enabled = false, updated_at = NOW() WHERE id = $1`
-	result, err := r.db.ExecContext(ctx, query, id)
+func (r *RuleRepository) Disable(ctx context.Context, organizationID, id uuid.UUID) error {
+	query := `UPDATE rules SET enabled = false, updated_at = NOW() WHERE id = $1 AND organization_id = $2`
+	result, err := r.db.ExecContext(ctx, query, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("failed to disable rule: %w", err)
 	}

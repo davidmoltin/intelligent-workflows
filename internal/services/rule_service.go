@@ -44,14 +44,14 @@ func NewRuleService(
 }
 
 // Create creates a new rule
-func (s *RuleService) Create(ctx context.Context, req *models.CreateRuleRequest) (*models.Rule, error) {
+func (s *RuleService) Create(ctx context.Context, organizationID uuid.UUID, req *models.CreateRuleRequest) (*models.Rule, error) {
 	// Validate rule definition
 	if err := s.validateRuleDefinition(req.RuleType, &req.Definition); err != nil {
 		return nil, fmt.Errorf("invalid rule definition: %w", err)
 	}
 
 	// Create rule
-	rule, err := s.ruleRepo.Create(ctx, req)
+	rule, err := s.ruleRepo.Create(ctx, organizationID, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create rule: %w", err)
 	}
@@ -67,8 +67,8 @@ func (s *RuleService) Create(ctx context.Context, req *models.CreateRuleRequest)
 }
 
 // GetByID retrieves a rule by UUID
-func (s *RuleService) GetByID(ctx context.Context, id uuid.UUID) (*models.Rule, error) {
-	rule, err := s.ruleRepo.GetByID(ctx, id)
+func (s *RuleService) GetByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Rule, error) {
+	rule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -77,15 +77,19 @@ func (s *RuleService) GetByID(ctx context.Context, id uuid.UUID) (*models.Rule, 
 }
 
 // GetByRuleID retrieves a rule by its rule_id string, with caching
-func (s *RuleService) GetByRuleID(ctx context.Context, ruleID string) (*models.Rule, error) {
+func (s *RuleService) GetByRuleID(ctx context.Context, organizationID uuid.UUID, ruleID string) (*models.Rule, error) {
 	// Try cache first
 	rule, err := s.getCachedRule(ctx, ruleID)
 	if err == nil && rule != nil {
+		// Verify organization ownership
+		if rule.OrganizationID != organizationID {
+			return nil, fmt.Errorf("rule not found")
+		}
 		return rule, nil
 	}
 
 	// Cache miss - fetch from database
-	rule, err = s.ruleRepo.GetByRuleID(ctx, ruleID)
+	rule, err = s.ruleRepo.GetByRuleID(ctx, organizationID, ruleID)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +103,13 @@ func (s *RuleService) GetByRuleID(ctx context.Context, ruleID string) (*models.R
 }
 
 // List retrieves rules with optional filtering and pagination
-func (s *RuleService) List(ctx context.Context, enabled *bool, ruleType *models.RuleType, limit, offset int) ([]*models.Rule, int64, error) {
+func (s *RuleService) List(ctx context.Context, organizationID uuid.UUID, enabled *bool, ruleType *models.RuleType, limit, offset int) ([]*models.Rule, int64, error) {
 	// Apply default limit
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 
-	rules, total, err := s.ruleRepo.List(ctx, enabled, ruleType, limit, offset)
+	rules, total, err := s.ruleRepo.List(ctx, organizationID, enabled, ruleType, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -114,9 +118,9 @@ func (s *RuleService) List(ctx context.Context, enabled *bool, ruleType *models.
 }
 
 // Update updates a rule
-func (s *RuleService) Update(ctx context.Context, id uuid.UUID, req *models.UpdateRuleRequest) (*models.Rule, error) {
+func (s *RuleService) Update(ctx context.Context, organizationID, id uuid.UUID, req *models.UpdateRuleRequest) (*models.Rule, error) {
 	// Get existing rule to validate type
-	existingRule, err := s.ruleRepo.GetByID(ctx, id)
+	existingRule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +133,7 @@ func (s *RuleService) Update(ctx context.Context, id uuid.UUID, req *models.Upda
 	}
 
 	// Update rule
-	rule, err := s.ruleRepo.Update(ctx, id, req)
+	rule, err := s.ruleRepo.Update(ctx, organizationID, id, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update rule: %w", err)
 	}
@@ -145,15 +149,15 @@ func (s *RuleService) Update(ctx context.Context, id uuid.UUID, req *models.Upda
 }
 
 // Delete deletes a rule
-func (s *RuleService) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *RuleService) Delete(ctx context.Context, organizationID, id uuid.UUID) error {
 	// Get rule to invalidate cache
-	rule, err := s.ruleRepo.GetByID(ctx, id)
+	rule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return err
 	}
 
 	// Delete rule
-	if err := s.ruleRepo.Delete(ctx, id); err != nil {
+	if err := s.ruleRepo.Delete(ctx, organizationID, id); err != nil {
 		return fmt.Errorf("failed to delete rule: %w", err)
 	}
 
@@ -168,15 +172,15 @@ func (s *RuleService) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // Enable enables a rule
-func (s *RuleService) Enable(ctx context.Context, id uuid.UUID) error {
+func (s *RuleService) Enable(ctx context.Context, organizationID, id uuid.UUID) error {
 	// Get rule to invalidate cache
-	rule, err := s.ruleRepo.GetByID(ctx, id)
+	rule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return err
 	}
 
 	// Enable rule
-	if err := s.ruleRepo.Enable(ctx, id); err != nil {
+	if err := s.ruleRepo.Enable(ctx, organizationID, id); err != nil {
 		return fmt.Errorf("failed to enable rule: %w", err)
 	}
 
@@ -191,15 +195,15 @@ func (s *RuleService) Enable(ctx context.Context, id uuid.UUID) error {
 }
 
 // Disable disables a rule
-func (s *RuleService) Disable(ctx context.Context, id uuid.UUID) error {
+func (s *RuleService) Disable(ctx context.Context, organizationID, id uuid.UUID) error {
 	// Get rule to invalidate cache
-	rule, err := s.ruleRepo.GetByID(ctx, id)
+	rule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return err
 	}
 
 	// Disable rule
-	if err := s.ruleRepo.Disable(ctx, id); err != nil {
+	if err := s.ruleRepo.Disable(ctx, organizationID, id); err != nil {
 		return fmt.Errorf("failed to disable rule: %w", err)
 	}
 
@@ -214,9 +218,9 @@ func (s *RuleService) Disable(ctx context.Context, id uuid.UUID) error {
 }
 
 // TestRule tests a rule against provided context
-func (s *RuleService) TestRule(ctx context.Context, id uuid.UUID, req *models.TestRuleRequest) (*models.TestRuleResponse, error) {
+func (s *RuleService) TestRule(ctx context.Context, organizationID, id uuid.UUID, req *models.TestRuleRequest) (*models.TestRuleResponse, error) {
 	// Get rule
-	rule, err := s.ruleRepo.GetByID(ctx, id)
+	rule, err := s.ruleRepo.GetByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}

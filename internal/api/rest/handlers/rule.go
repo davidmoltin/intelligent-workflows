@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -29,6 +30,13 @@ func NewRuleHandler(log *logger.Logger, ruleService *services.RuleService) *Rule
 
 // Create creates a new rule
 func (h *RuleHandler) Create(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	var req models.CreateRuleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -41,7 +49,7 @@ func (h *RuleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, err := h.ruleService.Create(r.Context(), &req)
+	rule, err := h.ruleService.Create(r.Context(), organizationID, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to create rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to create rule")
@@ -53,6 +61,13 @@ func (h *RuleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get retrieves a rule by ID
 func (h *RuleHandler) Get(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -60,7 +75,7 @@ func (h *RuleHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, err := h.ruleService.GetByID(r.Context(), id)
+	rule, err := h.ruleService.GetByID(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get rule", logger.Err(err))
 		h.respondError(w, http.StatusNotFound, "Rule not found")
@@ -72,6 +87,13 @@ func (h *RuleHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // List retrieves a list of rules
 func (h *RuleHandler) List(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	// Parse query parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
@@ -108,7 +130,7 @@ func (h *RuleHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rules, total, err := h.ruleService.List(r.Context(), enabled, ruleType, limit, offset)
+	rules, total, err := h.ruleService.List(r.Context(), organizationID, enabled, ruleType, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list rules", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to list rules")
@@ -128,6 +150,13 @@ func (h *RuleHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Update updates a rule
 func (h *RuleHandler) Update(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -147,7 +176,7 @@ func (h *RuleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, err := h.ruleService.Update(r.Context(), id, &req)
+	rule, err := h.ruleService.Update(r.Context(), organizationID, id, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to update rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to update rule")
@@ -159,6 +188,13 @@ func (h *RuleHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a rule
 func (h *RuleHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -166,7 +202,7 @@ func (h *RuleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ruleService.Delete(r.Context(), id); err != nil {
+	if err := h.ruleService.Delete(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to delete rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to delete rule")
 		return
@@ -177,6 +213,13 @@ func (h *RuleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // Enable enables a rule
 func (h *RuleHandler) Enable(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -184,7 +227,7 @@ func (h *RuleHandler) Enable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ruleService.Enable(r.Context(), id); err != nil {
+	if err := h.ruleService.Enable(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to enable rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to enable rule")
 		return
@@ -195,6 +238,13 @@ func (h *RuleHandler) Enable(w http.ResponseWriter, r *http.Request) {
 
 // Disable disables a rule
 func (h *RuleHandler) Disable(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -202,7 +252,7 @@ func (h *RuleHandler) Disable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ruleService.Disable(r.Context(), id); err != nil {
+	if err := h.ruleService.Disable(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to disable rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to disable rule")
 		return
@@ -213,6 +263,13 @@ func (h *RuleHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 // TestRule tests a rule with provided context
 func (h *RuleHandler) TestRule(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		h.respondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -232,7 +289,7 @@ func (h *RuleHandler) TestRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.ruleService.TestRule(r.Context(), id, &req)
+	response, err := h.ruleService.TestRule(r.Context(), organizationID, id, &req)
 	if err != nil {
 		h.logger.Errorf("Failed to test rule", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to test rule")

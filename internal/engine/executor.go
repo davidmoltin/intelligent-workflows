@@ -27,7 +27,7 @@ type ExecutionRepository interface {
 
 // RuleService interface for loading rules
 type RuleService interface {
-	GetByRuleID(ctx context.Context, ruleID string) (*models.Rule, error)
+	GetByRuleID(ctx context.Context, organizationID uuid.UUID, ruleID string) (*models.Rule, error)
 }
 
 // WorkflowExecutor executes workflows
@@ -358,7 +358,7 @@ func (we *WorkflowExecutor) executeStep(
 	// Execute based on step type
 	switch step.Type {
 	case "condition":
-		nextStepID, err = we.executeConditionStep(ctx, step, execContext)
+		nextStepID, err = we.executeConditionStep(ctx, execution, step, execContext)
 
 	case "action":
 		actionResult, err = we.executeActionStep(ctx, step, execContext)
@@ -412,6 +412,7 @@ func (we *WorkflowExecutor) executeStep(
 // executeConditionStep executes a condition step
 func (we *WorkflowExecutor) executeConditionStep(
 	ctx context.Context,
+	execution *models.WorkflowExecution,
 	step *models.Step,
 	execContext map[string]interface{},
 ) (string, error) {
@@ -423,8 +424,8 @@ func (we *WorkflowExecutor) executeConditionStep(
 			return "", fmt.Errorf("rule_id specified but rule service not configured")
 		}
 
-		// Load the rule
-		rule, err := we.ruleService.GetByRuleID(ctx, step.RuleID)
+		// Load the rule with organization_id for proper multi-tenancy isolation
+		rule, err := we.ruleService.GetByRuleID(ctx, execution.OrganizationID, step.RuleID)
 		if err != nil {
 			return "", fmt.Errorf("failed to load rule %s: %w", step.RuleID, err)
 		}
