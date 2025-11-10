@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Trash2 } from 'lucide-react'
 
 interface StepEditorProps {
   step: Step | null
@@ -56,6 +57,31 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
   const [recordEntity, setRecordEntity] = useState('')
   const [recordEntityId, setRecordEntityId] = useState('')
   const [recordData, setRecordData] = useState('')
+
+  // Parallel fields
+  const [parallelStrategy, setParallelStrategy] = useState<'all_must_pass' | 'any_can_pass' | 'best_effort'>(
+    step?.parallel?.strategy || 'all_must_pass'
+  )
+  const [parallelSteps, setParallelSteps] = useState<Step[]>(step?.parallel?.steps || [])
+
+  const handleAddParallelStep = () => {
+    const newStep: Step = {
+      id: `step_${Date.now()}`,
+      type: 'condition',
+      name: 'New Step',
+    }
+    setParallelSteps([...parallelSteps, newStep])
+  }
+
+  const handleRemoveParallelStep = (index: number) => {
+    setParallelSteps(parallelSteps.filter((_, i) => i !== index))
+  }
+
+  const handleUpdateParallelStep = (index: number, updatedStep: Partial<Step>) => {
+    const updated = [...parallelSteps]
+    updated[index] = { ...updated[index], ...updatedStep }
+    setParallelSteps(updated)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,6 +133,11 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
       }
 
       newStep.execute = [executeAction]
+    } else if (stepType === 'parallel') {
+      newStep.parallel = {
+        steps: parallelSteps,
+        strategy: parallelStrategy,
+      }
     }
 
     onSave(newStep)
@@ -415,13 +446,127 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
             </div>
           )}
 
-          {(stepType === 'parallel' || stepType === 'foreach') && (
+          {stepType === 'parallel' && (
             <div className="space-y-4 rounded-lg border p-4">
-              <h4 className="font-medium">
-                {stepType === 'parallel' ? 'Parallel' : 'For Each'} Configuration
-              </h4>
+              <h4 className="font-medium">Parallel Configuration</h4>
+
+              <div className="space-y-2">
+                <Label htmlFor="parallel-strategy">Strategy</Label>
+                <Select
+                  value={parallelStrategy}
+                  onValueChange={(value: any) => setParallelStrategy(value)}
+                >
+                  <SelectTrigger id="parallel-strategy">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_must_pass">All Must Pass</SelectItem>
+                    <SelectItem value="any_can_pass">Any Can Pass</SelectItem>
+                    <SelectItem value="best_effort">Best Effort</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {parallelStrategy === 'all_must_pass' && 'All parallel steps must succeed'}
+                  {parallelStrategy === 'any_can_pass' && 'At least one step must succeed'}
+                  {parallelStrategy === 'best_effort' && 'Continue regardless of failures'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Parallel Steps ({parallelSteps.length})</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddParallelStep}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Step
+                  </Button>
+                </div>
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {parallelSteps.map((pStep, index) => (
+                    <div key={index} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveParallelStep(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-2 grid-cols-2">
+                        <div>
+                          <Label className="text-xs">ID</Label>
+                          <Input
+                            size={1}
+                            value={pStep.id}
+                            onChange={(e) =>
+                              handleUpdateParallelStep(index, { id: e.target.value })
+                            }
+                            placeholder="step_id"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Type</Label>
+                          <Select
+                            value={pStep.type}
+                            onValueChange={(value: any) =>
+                              handleUpdateParallelStep(index, { type: value })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="condition">Condition</SelectItem>
+                              <SelectItem value="action">Action</SelectItem>
+                              <SelectItem value="execute">Execute</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Name (optional)</Label>
+                        <Input
+                          size={1}
+                          className="h-8"
+                          value={pStep.name || ''}
+                          onChange={(e) =>
+                            handleUpdateParallelStep(index, { name: e.target.value })
+                          }
+                          placeholder="Step name"
+                        />
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        Configure full step details by saving and editing in the main workflow builder
+                      </p>
+                    </div>
+                  ))}
+
+                  {parallelSteps.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No parallel steps added yet. Click "Add Step" to create one.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {stepType === 'foreach' && (
+            <div className="space-y-4 rounded-lg border p-4">
+              <h4 className="font-medium">For Each Configuration</h4>
               <p className="text-sm text-muted-foreground">
-                Advanced configuration for {stepType} steps will be available in a future update.
+                For Each loop configuration will be available in a future update.
               </p>
             </div>
           )}

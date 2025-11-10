@@ -39,13 +39,15 @@ export interface Step {
   condition?: Condition
   action?: Action
   execute?: ExecuteAction[]
+  parallel?: ParallelStep
   on_true?: string
   on_false?: string
   next?: string
   metadata?: Record<string, any>
+  retry?: RetryConfig
+  // Legacy fields for backwards compatibility
   steps?: Step[]
   strategy?: string
-  retry?: RetryConfig
 }
 
 export interface Condition {
@@ -76,6 +78,11 @@ export interface ExecuteAction {
   entity?: string
   entity_id?: string
   data?: Record<string, any>
+}
+
+export interface ParallelStep {
+  steps: Step[]
+  strategy: 'all_must_pass' | 'any_can_pass' | 'best_effort'
 }
 
 export interface RetryConfig {
