@@ -46,22 +46,19 @@
       "id": "require_approval",
       "type": "action",
       "name": "Block order and request approval",
-      "action": "block",
-      "reason": "Order requires manager approval for amounts over $10,000",
-      "metadata": {
-        "approval_required": true,
-        "approver_role": "sales_manager",
-        "priority": "high",
-        "auto_expire": "24h"
+      "action": {
+        "type": "block",
+        "reason": "Order requires manager approval for amounts over $10,000"
       },
       "execute": [
         {
           "type": "create_approval_request",
           "entity": "order",
           "entity_id": "{{order.id}}",
-          "approver_role": "sales_manager",
-          "expires_in": "24h",
-          "metadata": {
+          "data": {
+            "approver_role": "sales_manager",
+            "reason": "High value order requires approval",
+            "expires_in": "24h",
             "customer_name": "{{customer.name}}",
             "order_total": "{{order.total}}",
             "order_items_count": "{{order.items.length}}"
@@ -69,20 +66,12 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["role:sales_manager"],
-          "template": "order_approval_required",
-          "data": {
-            "order_id": "{{order.id}}",
-            "customer_name": "{{customer.name}}",
-            "order_total": "{{order.total}}",
-            "approval_link": "{{approval_url}}"
-          }
+          "message": "Order {{order.id}} requires approval - ${{order.total}} from {{customer.name}}. Approval link: {{approval_url}}"
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["#sales-approvals"],
+          "recipients": ["slack:#sales-approvals"],
           "message": "🚨 Order {{order.id}} requires approval - ${{order.total}} from {{customer.name}}"
         }
       ]
@@ -91,10 +80,8 @@
       "id": "allow_order",
       "type": "action",
       "name": "Allow order to proceed",
-      "action": "allow",
-      "metadata": {
-        "approved_by": "workflow",
-        "reason": "Within automatic approval limits"
+      "action": {
+        "type": "allow"
       }
     }
   ]

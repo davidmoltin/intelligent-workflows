@@ -22,119 +22,116 @@
       "id": "parallel_fraud_checks",
       "type": "parallel",
       "name": "Run multiple fraud checks simultaneously",
-      "strategy": "all_must_pass",
-      "steps": [
-        {
-          "id": "check_velocity",
-          "type": "condition",
-          "name": "Check cart creation velocity",
-          "condition": {
-            "field": "customer.carts_created_last_hour",
-            "operator": "lte",
-            "value": 5
-          }
-        },
-        {
-          "id": "check_high_value_items",
-          "type": "condition",
-          "name": "Check for unusual high-value items",
-          "condition": {
-            "and": [
-              {
-                "field": "cart.total",
-                "operator": "gte",
-                "value": 5000
-              },
-              {
-                "field": "customer.account_age_days",
-                "operator": "lte",
-                "value": 7
-              }
-            ]
-          }
-        },
-        {
-          "id": "check_shipping_address",
-          "type": "condition",
-          "name": "Verify shipping address",
-          "condition": {
-            "or": [
-              {
-                "field": "cart.shipping_address.country",
-                "operator": "eq",
-                "value": "{{customer.billing_address.country}}"
-              },
-              {
-                "field": "customer.verified",
-                "operator": "eq",
-                "value": true
-              }
-            ]
-          }
-        },
-        {
-          "id": "check_external_fraud_api",
-          "type": "execute",
-          "name": "Call external fraud detection API",
-          "action": "http_request",
-          "config": {
-            "url": "https://fraud-api.example.com/check",
-            "method": "POST",
-            "headers": {
-              "Authorization": "Bearer {{secrets.fraud_api_token}}"
-            },
-            "body": {
-              "customer_id": "{{customer.id}}",
-              "cart_total": "{{cart.total}}",
-              "device_fingerprint": "{{device.fingerprint}}"
+      "parallel": {
+        "strategy": "all_must_pass",
+        "steps": [
+          {
+            "id": "check_velocity",
+            "type": "condition",
+            "name": "Check cart creation velocity",
+            "condition": {
+              "field": "customer.carts_created_last_hour",
+              "operator": "lte",
+              "value": 5
             }
           },
-          "retry": {
-            "max_attempts": 3,
-            "backoff": "exponential",
-            "retry_on": ["timeout", "5xx"]
+          {
+            "id": "check_high_value_items",
+            "type": "condition",
+            "name": "Check for unusual high-value items",
+            "condition": {
+              "and": [
+                {
+                  "field": "cart.total",
+                  "operator": "gte",
+                  "value": 5000
+                },
+                {
+                  "field": "customer.account_age_days",
+                  "operator": "lte",
+                  "value": 7
+                }
+              ]
+            }
           },
-          "validate_response": {
-            "field": "risk_score",
-            "operator": "lt",
-            "value": 0.7
+          {
+            "id": "check_shipping_address",
+            "type": "condition",
+            "name": "Verify shipping address",
+            "condition": {
+              "or": [
+                {
+                  "field": "cart.shipping_address.country",
+                  "operator": "eq",
+                  "value": "{{customer.billing_address.country}}"
+                },
+                {
+                  "field": "customer.verified",
+                  "operator": "eq",
+                  "value": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "check_external_fraud_api",
+            "type": "execute",
+            "name": "Call external fraud detection API",
+            "execute": [
+              {
+                "type": "http_request",
+                "url": "https://fraud-api.example.com/check",
+                "method": "POST",
+                "headers": {
+                  "Authorization": "Bearer {{secrets.fraud_api_token}}"
+                },
+                "body": {
+                  "customer_id": "{{customer.id}}",
+                  "cart_total": "{{cart.total}}",
+                  "device_fingerprint": "{{device.fingerprint}}"
+                }
+              }
+            ],
+            "retry": {
+              "max_attempts": 3,
+              "backoff": "exponential",
+              "retry_on": ["timeout", "5xx"]
+            }
           }
-        }
-      ],
-      "on_pass": "allow_checkout",
-      "on_fail": "flag_for_review"
+        ]
+      },
+      "next": "allow_checkout",
+      "on_error": "flag_for_review"
     },
     {
       "id": "flag_for_review",
       "type": "action",
       "name": "Block and flag for manual review",
-      "action": "block",
-      "reason": "Transaction flagged for potential fraud",
-      "metadata": {
-        "fraud_check_failed": true,
-        "review_required": true
+      "action": {
+        "type": "block",
+        "reason": "Transaction flagged for potential fraud"
       },
       "execute": [
         {
           "type": "create_approval_request",
           "entity": "cart",
           "entity_id": "{{cart.id}}",
-          "approver_role": "fraud_analyst",
-          "priority": "urgent",
-          "expires_in": "4h"
+          "data": {
+            "approver_role": "fraud_analyst",
+            "reason": "Potential fraud detected - urgent review required",
+            "expires_in": "4h"
+          }
         },
         {
           "type": "notify",
-          "channel": "pagerduty",
-          "recipients": ["fraud-team"],
-          "severity": "high",
-          "message": "Potential fraud detected for cart {{cart.id}}"
+          "recipients": ["pagerduty:fraud-team"],
+          "message": "URGENT: Potential fraud detected for cart {{cart.id}}"
         },
         {
           "type": "update_record",
           "entity": "customer",
           "entity_id": "{{customer.id}}",
-          "fields": {
+          "data": {
             "fraud_flag": true,
             "flagged_at": "{{now}}"
           }
@@ -145,9 +142,8 @@
       "id": "allow_checkout",
       "type": "action",
       "name": "Allow checkout to proceed",
-      "action": "allow",
-      "metadata": {
-        "fraud_check_passed": true
+      "action": {
+        "type": "allow"
       }
     }
   ]
