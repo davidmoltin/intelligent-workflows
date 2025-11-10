@@ -58,13 +58,24 @@ export interface Condition {
 }
 
 export interface Action {
-  action: 'allow' | 'block' | 'execute'
+  type: 'allow' | 'block' | 'execute' | 'wait' | 'require_approval'
   reason?: string
 }
 
 export interface ExecuteAction {
-  type: 'notify' | 'webhook' | 'create_record' | 'update_record'
-  config?: Record<string, any>
+  type: 'notify' | 'webhook' | 'http_request' | 'create_record' | 'update_record' | 'create_approval_request' | 'log'
+  // Notify action fields
+  recipients?: string[]
+  message?: string
+  // Webhook/HTTP request fields
+  url?: string
+  method?: string
+  headers?: Record<string, string>
+  body?: Record<string, any>
+  // Record action fields
+  entity?: string
+  entity_id?: string
+  data?: Record<string, any>
 }
 
 export interface RetryConfig {

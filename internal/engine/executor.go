@@ -74,6 +74,11 @@ func (we *WorkflowExecutor) SetRuleService(ruleService RuleService) {
 	we.ruleService = ruleService
 }
 
+// SetApprovalService sets the approval service for the action executor (optional dependency)
+func (we *WorkflowExecutor) SetApprovalService(approvalService ApprovalService) {
+	we.actionExecutor.SetApprovalService(approvalService)
+}
+
 // Execute executes a workflow
 func (we *WorkflowExecutor) Execute(
 	ctx context.Context,
@@ -131,6 +136,9 @@ func (we *WorkflowExecutor) Execute(
 	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
 		return nil, fmt.Errorf("failed to create execution: %w", err)
 	}
+
+	// Set execution context for action executor (needed for approval requests)
+	we.actionExecutor.SetExecutionContext(execution.ID)
 
 	// Broadcast execution started event
 	we.broadcastExecutionEvent(execution)

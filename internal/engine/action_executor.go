@@ -24,10 +24,26 @@ type ActionResult struct {
 	Error   string                 `json:"error,omitempty"`
 }
 
+// ApprovalService interface for creating approval requests
+type ApprovalService interface {
+	CreateApprovalRequest(
+		ctx context.Context,
+		executionID uuid.UUID,
+		entityType string,
+		entityID string,
+		requesterID *uuid.UUID,
+		approverRole string,
+		reason string,
+		expiresIn *time.Duration,
+	) (*models.ApprovalRequest, error)
+}
+
 // ActionExecutor handles executing workflow actions
 type ActionExecutor struct {
-	logger     *logger.Logger
-	httpClient *http.Client
+	logger          *logger.Logger
+	httpClient      *http.Client
+	approvalService ApprovalService
+	executionID     uuid.UUID // Current execution ID for context
 }
 
 // NewActionExecutor creates a new action executor
@@ -38,6 +54,16 @@ func NewActionExecutor(log *logger.Logger) *ActionExecutor {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// SetApprovalService sets the approval service (optional dependency)
+func (ae *ActionExecutor) SetApprovalService(service ApprovalService) {
+	ae.approvalService = service
+}
+
+// SetExecutionContext sets the current execution context
+func (ae *ActionExecutor) SetExecutionContext(executionID uuid.UUID) {
+	ae.executionID = executionID
 }
 
 // ExecuteAction executes a workflow action
@@ -132,6 +158,9 @@ func (ae *ActionExecutor) executeSingleAction(
 
 	case "log":
 		return ae.executeLog(ctx, action, execContext)
+
+	case "create_approval_request":
+		return ae.executeCreateApprovalRequest(ctx, action, execContext)
 
 	default:
 		return nil, fmt.Errorf("unsupported execute action type: %s", action.Type)
@@ -369,4 +398,104 @@ func (ae *ActionExecutor) getContextValue(path string, context map[string]interf
 	}
 
 	return nil
+}
+
+// executeCreateApprovalRequest creates an approval request
+func (ae *ActionExecutor) executeCreateApprovalRequest(
+	ctx context.Context,
+	action models.ExecuteAction,
+	execContext map[string]interface{},
+) (map[string]interface{}, error) {
+	if ae.approvalService == nil {
+		return nil, fmt.Errorf("approval service not configured")
+	}
+
+	if ae.executionID == uuid.Nil {
+		return nil, fmt.Errorf("execution context not set")
+	}
+
+	// Extract entity and entity ID
+	entityType := action.Entity
+	if entityType == "" {
+		return nil, fmt.Errorf("entity type is required for approval request")
+	}
+
+	// Interpolate entity ID if it contains variables
+	entityID := action.EntityID
+	if entityID != "" && strings.Contains(entityID, "{{") {
+		// Simple template replacement for {{variable}} format
+		entityID = strings.ReplaceAll(entityID, "{{", "${")
+		entityID = strings.ReplaceAll(entityID, "}}", "}")
+		if strings.HasPrefix(entityID, "${") && strings.HasSuffix(entityID, "}") {
+			varName := strings.TrimSuffix(strings.TrimPrefix(entityID, "${"), "}")
+			if val := ae.getContextValue(varName, execContext); val != nil {
+				entityID = fmt.Sprintf("%v", val)
+			}
+		}
+	}
+
+	// Extract approver role from data
+	approverRole := "manager" // default
+	if action.Data != nil {
+		if role, ok := action.Data["approver_role"].(string); ok && role != "" {
+			approverRole = role
+		}
+	}
+
+	// Extract reason
+	reason := "Approval required by workflow"
+	if action.Data != nil {
+		if r, ok := action.Data["reason"].(string); ok && r != "" {
+			reason = r
+		}
+	}
+
+	// Parse expires_in duration
+	var expiresIn *time.Duration
+	if action.Data != nil {
+		if expiresInStr, ok := action.Data["expires_in"].(string); ok && expiresInStr != "" {
+			duration, err := time.ParseDuration(expiresInStr)
+			if err == nil {
+				expiresIn = &duration
+			} else {
+				ae.logger.Warnf("Failed to parse expires_in duration %s: %v", expiresInStr, err)
+			}
+		}
+	}
+
+	// Create approval request
+	ae.logger.Infof("Creating approval request: entity=%s/%s, approver=%s", entityType, entityID, approverRole)
+
+	approval, err := ae.approvalService.CreateApprovalRequest(
+		ctx,
+		ae.executionID,
+		entityType,
+		entityID,
+		nil, // requesterID - can be extracted from context if needed
+		approverRole,
+		reason,
+		expiresIn,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create approval request: %w", err)
+	}
+
+	result := map[string]interface{}{
+		"type":         "create_approval_request",
+		"success":      true,
+		"approval_id":  approval.ID.String(),
+		"request_id":   approval.RequestID,
+		"entity":       entityType,
+		"entity_id":    entityID,
+		"status":       string(approval.Status),
+		"requested_at": approval.RequestedAt.Unix(),
+	}
+
+	if approval.ExpiresAt != nil {
+		result["expires_at"] = approval.ExpiresAt.Unix()
+	}
+
+	ae.logger.Infof("Approval request created successfully: %s", approval.RequestID)
+
+	return result, nil
 }

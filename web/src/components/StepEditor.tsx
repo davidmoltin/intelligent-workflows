@@ -37,14 +37,25 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
   const [onFalse, setOnFalse] = useState(step?.on_false || '')
 
   // Action fields
-  const [actionType, setActionType] = useState<Action['action']>(
-    step?.action?.action || 'allow'
+  const [actionType, setActionType] = useState<Action['type']>(
+    step?.action?.type || 'allow'
   )
   const [actionReason, setActionReason] = useState(step?.action?.reason || '')
 
   // Execute fields
   const [executeType, setExecuteType] = useState<ExecuteAction['type']>('notify')
-  const [executeConfig, setExecuteConfig] = useState('')
+  // Notify fields
+  const [recipients, setRecipients] = useState<string>('')
+  const [message, setMessage] = useState('')
+  // Webhook fields
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookMethod, setWebhookMethod] = useState('POST')
+  const [webhookHeaders, setWebhookHeaders] = useState('')
+  const [webhookBody, setWebhookBody] = useState('')
+  // Record fields
+  const [recordEntity, setRecordEntity] = useState('')
+  const [recordEntityId, setRecordEntityId] = useState('')
+  const [recordData, setRecordData] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,16 +77,36 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
       newStep.on_false = onFalse || undefined
     } else if (stepType === 'action') {
       newStep.action = {
-        action: actionType,
+        type: actionType,
         reason: actionReason || undefined,
       }
     } else if (stepType === 'execute') {
-      newStep.execute = [
-        {
-          type: executeType,
-          config: executeConfig ? JSON.parse(executeConfig) : undefined,
-        },
-      ]
+      const executeAction: ExecuteAction = {
+        type: executeType,
+      }
+
+      // Add type-specific fields
+      if (executeType === 'notify') {
+        executeAction.recipients = recipients ? recipients.split(',').map(r => r.trim()) : []
+        executeAction.message = message
+      } else if (executeType === 'webhook' || executeType === 'http_request') {
+        executeAction.url = webhookUrl
+        executeAction.method = webhookMethod
+        if (webhookHeaders) {
+          executeAction.headers = JSON.parse(webhookHeaders)
+        }
+        if (webhookBody) {
+          executeAction.body = JSON.parse(webhookBody)
+        }
+      } else if (executeType === 'create_record' || executeType === 'update_record' || executeType === 'create_approval_request') {
+        executeAction.entity = recordEntity
+        executeAction.entity_id = recordEntityId
+        if (recordData) {
+          executeAction.data = JSON.parse(recordData)
+        }
+      }
+
+      newStep.execute = [executeAction]
     }
 
     onSave(newStep)
@@ -212,6 +243,8 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
                     <SelectItem value="allow">Allow</SelectItem>
                     <SelectItem value="block">Block</SelectItem>
                     <SelectItem value="execute">Execute</SelectItem>
+                    <SelectItem value="wait">Wait</SelectItem>
+                    <SelectItem value="require_approval">Require Approval</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -243,21 +276,142 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
                   <SelectContent>
                     <SelectItem value="notify">Notify</SelectItem>
                     <SelectItem value="webhook">Webhook</SelectItem>
+                    <SelectItem value="http_request">HTTP Request</SelectItem>
                     <SelectItem value="create_record">Create Record</SelectItem>
                     <SelectItem value="update_record">Update Record</SelectItem>
+                    <SelectItem value="create_approval_request">Create Approval Request</SelectItem>
+                    <SelectItem value="log">Log</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="execute-config">Configuration (JSON)</Label>
-                <Textarea
-                  id="execute-config"
-                  placeholder='e.g., {"url": "https://api.example.com/notify"}'
-                  value={executeConfig}
-                  onChange={(e) => setExecuteConfig(e.target.value)}
-                  rows={4}
-                />
-              </div>
+
+              {/* Notify fields */}
+              {executeType === 'notify' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="recipients">Recipients (comma-separated)</Label>
+                    <Input
+                      id="recipients"
+                      placeholder="e.g., user@example.com, role:manager"
+                      value={recipients}
+                      onChange={(e) => setRecipients(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Message</Label>
+                    <Textarea
+                      id="message"
+                      placeholder="Enter notification message..."
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Webhook/HTTP Request fields */}
+              {(executeType === 'webhook' || executeType === 'http_request') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-url">URL</Label>
+                    <Input
+                      id="webhook-url"
+                      placeholder="https://api.example.com/webhook"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-method">HTTP Method</Label>
+                    <Select
+                      value={webhookMethod}
+                      onValueChange={setWebhookMethod}
+                    >
+                      <SelectTrigger id="webhook-method">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                        <SelectItem value="PUT">PUT</SelectItem>
+                        <SelectItem value="PATCH">PATCH</SelectItem>
+                        <SelectItem value="DELETE">DELETE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-headers">Headers (JSON, optional)</Label>
+                    <Textarea
+                      id="webhook-headers"
+                      placeholder='{"Authorization": "Bearer token"}'
+                      value={webhookHeaders}
+                      onChange={(e) => setWebhookHeaders(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-body">Body (JSON, optional)</Label>
+                    <Textarea
+                      id="webhook-body"
+                      placeholder='{"key": "value"}'
+                      value={webhookBody}
+                      onChange={(e) => setWebhookBody(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Record fields */}
+              {(executeType === 'create_record' || executeType === 'update_record' || executeType === 'create_approval_request') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-entity">Entity Type</Label>
+                    <Input
+                      id="record-entity"
+                      placeholder="e.g., order, customer, approval"
+                      value={recordEntity}
+                      onChange={(e) => setRecordEntity(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-entity-id">Entity ID (optional, use {{}} for variables)</Label>
+                    <Input
+                      id="record-entity-id"
+                      placeholder="e.g., {{order.id}}"
+                      value={recordEntityId}
+                      onChange={(e) => setRecordEntityId(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-data">Data (JSON)</Label>
+                    <Textarea
+                      id="record-data"
+                      placeholder='{"field": "value", "status": "pending"}'
+                      value={recordData}
+                      onChange={(e) => setRecordData(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Log action - just uses message */}
+              {executeType === 'log' && (
+                <div className="space-y-2">
+                  <Label htmlFor="log-message">Log Message</Label>
+                  <Textarea
+                    id="log-message"
+                    placeholder="Enter log message..."
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              )}
             </div>
           )}
 
