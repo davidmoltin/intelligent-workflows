@@ -3,84 +3,84 @@
   "version": "1.0.0",
   "name": "Data Processing with Step Timeouts",
   "description": "Example demonstrating step-level timeout configuration",
-  "definition": {
-    "timeout": "10m",
-    "trigger": {
-      "type": "event",
-      "event": "data.batch.ready"
-    },
-    "steps": [
-      {
-        "id": "fetch-data",
-        "type": "action",
-        "timeout": "2m",
-        "action": {
-          "action": "execute"
-        },
-        "execute": [
-          {
-            "type": "http_request",
-            "url": "https://api.example.com/data/batch/${event.batch_id}",
-            "method": "GET"
-          }
-        ],
-        "retry": {
-          "max_attempts": 3,
-          "backoff": "exponential",
-          "retry_on": ["*"]
-        }
-      },
-      {
-        "id": "validate-data",
-        "type": "condition",
-        "timeout": "1m",
-        "condition": {
-          "field": "data.records_count",
-          "operator": "gt",
-          "value": 0
-        },
-        "on_true": "process-data",
-        "on_false": "log-error"
-      },
-      {
-        "id": "process-data",
-        "type": "action",
-        "timeout": "5m",
-        "action": {
-          "action": "execute"
-        },
-        "execute": [
-          {
-            "type": "http_request",
-            "url": "https://processing.example.com/process",
-            "method": "POST",
-            "body": {
-              "batch_id": "${event.batch_id}",
-              "records": "${data.records}"
-            }
-          },
-          {
-            "type": "notify",
-            "recipients": ["data-team@example.com"],
-            "message": "Batch ${event.batch_id} processed successfully"
-          }
-        ]
-      },
-      {
-        "id": "log-error",
-        "type": "action",
-        "action": {
-          "action": "block",
-          "reason": "No data records found in batch"
-        },
-        "execute": [
-          {
-            "type": "log",
-            "message": "Empty batch received: ${event.batch_id}"
-          }
-        ]
-      }
-    ]
+  "enabled": true,
+  "tags": ["data-processing", "timeout", "batch"],
+  "trigger": {
+    "type": "event",
+    "event": "data.batch.ready"
   },
-  "tags": ["data-processing", "timeout", "batch"]
+  "timeout": "10m",
+  "steps": [
+    {
+      "id": "fetch-data",
+      "type": "action",
+      "timeout": "2m",
+      "action": {
+        "type": "execute"
+      },
+      "execute": [
+        {
+          "type": "http_request",
+          "url": "https://api.example.com/data/batch/{{event.batch_id}}",
+          "method": "GET"
+        }
+      ],
+      "retry": {
+        "max_attempts": 3,
+        "backoff": "exponential",
+        "retry_on": ["*"]
+      },
+      "next": "validate-data"
+    },
+    {
+      "id": "validate-data",
+      "type": "condition",
+      "timeout": "1m",
+      "condition": {
+        "field": "data.records_count",
+        "operator": "gt",
+        "value": 0
+      },
+      "on_true": "process-data",
+      "on_false": "log-error"
+    },
+    {
+      "id": "process-data",
+      "type": "action",
+      "timeout": "5m",
+      "action": {
+        "type": "execute"
+      },
+      "execute": [
+        {
+          "type": "http_request",
+          "url": "https://processing.example.com/process",
+          "method": "POST",
+          "body": {
+            "batch_id": "{{event.batch_id}}",
+            "records": "{{data.records}}"
+          }
+        },
+        {
+          "type": "notify",
+          "recipients": ["data-team@example.com"],
+          "message": "Batch {{event.batch_id}} processed successfully"
+        }
+      ]
+    },
+    {
+      "id": "log-error",
+      "type": "action",
+      "action": {
+        "type": "block",
+        "reason": "No data records found in batch"
+      },
+      "execute": [
+        {
+          "type": "log",
+          "message": "Empty batch received: {{event.batch_id}}"
+        }
+      ]
+    }
+  ]
 }

@@ -50,23 +50,19 @@
       "id": "require_sales_rep_review",
       "type": "action",
       "name": "Request sales rep review",
-      "action": "block",
-      "reason": "Quote requires sales rep review",
-      "metadata": {
-        "approval_level": "sales_rep_review",
-        "approval_stage": 1,
-        "total_stages": 2
+      "action": {
+        "type": "require_approval",
+        "reason": "Quote requires sales rep review"
       },
       "execute": [
         {
           "type": "create_approval_request",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "approver_role": "sales_rep",
-          "approver_id": "{{quote.assigned_sales_rep_id}}",
-          "priority": "normal",
-          "expires_in": "48h",
-          "metadata": {
+          "data": {
+            "approver_role": "sales_rep",
+            "reason": "Quote requires sales rep review before manager approval",
+            "expires_in": "48h",
             "stage": "sales_rep_review",
             "quote_number": "{{quote.number}}",
             "customer_name": "{{customer.name}}",
@@ -77,30 +73,19 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["{{sales_rep.email}}"],
-          "template": "quote_rep_review_required",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "quote_total": "{{quote.total}}",
-            "discount_percentage": "{{quote.discount_percentage}}",
-            "line_items_count": "{{quote.line_items.length}}",
-            "review_url": "{{approval_url}}",
-            "expires_at": "{{now + 48h}}"
-          }
+          "message": "Quote {{quote.number}} requires your review - ${{quote.total}} for {{customer.name}}. Discount: {{quote.discount_percentage}}%, Items: {{quote.line_items.length}}"
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["{{sales_rep.slack_id}}"],
+          "recipients": ["slack:{{sales_rep.slack_id}}"],
           "message": "📋 Quote {{quote.number}} requires your review - ${{quote.total}} for {{customer.name}}"
         },
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "pending_rep_review",
             "review_requested_at": "{{now}}",
             "review_requested_by": "workflow_automation"
@@ -113,45 +98,11 @@
       "id": "wait_for_rep_decision",
       "type": "wait",
       "name": "Wait for sales rep decision",
-      "event": "quote.rep_reviewed",
-      "timeout": "48h",
-      "on_timeout": "handle_rep_review_timeout",
-      "on_event": "check_rep_decision"
-    },
-    {
-      "id": "handle_rep_review_timeout",
-      "type": "action",
-      "name": "Handle sales rep review timeout",
-      "action": "execute",
-      "execute": [
-        {
-          "type": "update_record",
-          "entity": "quote",
-          "entity_id": "{{quote.id}}",
-          "fields": {
-            "status": "rep_review_expired",
-            "expired_at": "{{now}}"
-          }
-        },
-        {
-          "type": "notify",
-          "channel": "email",
-          "recipients": ["{{sales_rep.email}}", "{{sales_manager.email}}"],
-          "template": "quote_rep_review_expired",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "sales_rep_name": "{{sales_rep.name}}"
-          }
-        },
-        {
-          "type": "notify",
-          "channel": "slack",
-          "recipients": ["#sales-alerts"],
-          "message": "⚠️ Quote {{quote.number}} review expired - Rep: {{sales_rep.name}}"
-        }
-      ],
-      "next": "block_quote"
+      "wait": {
+        "event": "quote.rep_reviewed",
+        "timeout": "48h"
+      },
+      "next": "check_rep_decision"
     },
     {
       "id": "check_rep_decision",
@@ -169,18 +120,16 @@
       "id": "handle_rep_rejection",
       "type": "action",
       "name": "Handle sales rep rejection",
-      "action": "block",
-      "reason": "Quote rejected by sales rep",
-      "metadata": {
-        "rejected_by": "sales_rep",
-        "rejection_reason": "{{quote.rep_rejection_reason}}"
+      "action": {
+        "type": "block",
+        "reason": "Quote rejected by sales rep: {{quote.rep_rejection_reason}}"
       },
       "execute": [
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "rejected_by_rep",
             "rejected_at": "{{now}}",
             "rejected_by": "{{sales_rep.id}}",
@@ -189,15 +138,8 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["{{quote.created_by_email}}"],
-          "template": "quote_rejected_by_rep",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "sales_rep_name": "{{sales_rep.name}}",
-            "rejection_reason": "{{quote.rep_rejection_reason}}"
-          }
+          "message": "Quote {{quote.number}} for {{customer.name}} was rejected by {{sales_rep.name}}. Reason: {{quote.rep_rejection_reason}}"
         }
       ]
     },
@@ -205,20 +147,16 @@
       "id": "require_manager_approval",
       "type": "action",
       "name": "Request sales manager approval",
-      "action": "block",
-      "reason": "Quote requires sales manager approval",
-      "metadata": {
-        "approval_level": "sales_manager_approval",
-        "approval_stage": 2,
-        "total_stages": 2,
-        "rep_approved_at": "{{now}}"
+      "action": {
+        "type": "require_approval",
+        "reason": "Quote requires sales manager approval (Stage 2 of 2)"
       },
       "execute": [
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "pending_manager_approval",
             "rep_approved_at": "{{now}}",
             "rep_approved_by": "{{sales_rep.id}}",
@@ -229,11 +167,10 @@
           "type": "create_approval_request",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "approver_role": "sales_manager",
-          "approver_id": "{{sales_rep.manager_id}}",
-          "priority": "high",
-          "expires_in": "24h",
-          "metadata": {
+          "data": {
+            "approver_role": "sales_manager",
+            "reason": "Quote approved by sales rep, requires manager final approval",
+            "expires_in": "24h",
             "stage": "sales_manager_approval",
             "quote_number": "{{quote.number}}",
             "customer_name": "{{customer.name}}",
@@ -246,25 +183,12 @@
         },
         {
           "type": "notify",
-          "channel": "email",
-          "recipients": ["{{sales_manager.email}}"],
-          "cc": ["{{sales_rep.email}}"],
-          "template": "quote_manager_approval_required",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "quote_total": "{{quote.total}}",
-            "discount_percentage": "{{quote.discount_percentage}}",
-            "sales_rep_name": "{{sales_rep.name}}",
-            "rep_comments": "{{quote.rep_comments}}",
-            "approval_url": "{{approval_url}}",
-            "expires_at": "{{now + 24h}}"
-          }
+          "recipients": ["{{sales_manager.email}}", "{{sales_rep.email}}"],
+          "message": "Quote {{quote.number}} needs manager approval - ${{quote.total}} for {{customer.name}}. Reviewed by {{sales_rep.name}}: {{quote.rep_comments}}"
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["{{sales_manager.slack_id}}"],
+          "recipients": ["slack:{{sales_manager.slack_id}}"],
           "message": "🔔 Quote {{quote.number}} needs your approval - ${{quote.total}} (reviewed by {{sales_rep.name}})"
         }
       ],
@@ -274,46 +198,11 @@
       "id": "wait_for_manager_decision",
       "type": "wait",
       "name": "Wait for sales manager decision",
-      "event": "quote.manager_reviewed",
-      "timeout": "24h",
-      "on_timeout": "handle_manager_approval_timeout",
-      "on_event": "check_manager_decision"
-    },
-    {
-      "id": "handle_manager_approval_timeout",
-      "type": "action",
-      "name": "Handle sales manager approval timeout",
-      "action": "execute",
-      "execute": [
-        {
-          "type": "update_record",
-          "entity": "quote",
-          "entity_id": "{{quote.id}}",
-          "fields": {
-            "status": "manager_approval_expired",
-            "expired_at": "{{now}}"
-          }
-        },
-        {
-          "type": "notify",
-          "channel": "email",
-          "recipients": ["{{sales_manager.email}}"],
-          "cc": ["{{sales_rep.email}}"],
-          "template": "quote_manager_approval_expired",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "sales_manager_name": "{{sales_manager.name}}"
-          }
-        },
-        {
-          "type": "notify",
-          "channel": "slack",
-          "recipients": ["#sales-alerts"],
-          "message": "⚠️ Quote {{quote.number}} manager approval expired - Manager: {{sales_manager.name}}"
-        }
-      ],
-      "next": "block_quote"
+      "wait": {
+        "event": "quote.manager_reviewed",
+        "timeout": "24h"
+      },
+      "next": "check_manager_decision"
     },
     {
       "id": "check_manager_decision",
@@ -331,18 +220,16 @@
       "id": "handle_manager_rejection",
       "type": "action",
       "name": "Handle sales manager rejection",
-      "action": "block",
-      "reason": "Quote rejected by sales manager",
-      "metadata": {
-        "rejected_by": "sales_manager",
-        "rejection_reason": "{{quote.manager_rejection_reason}}"
+      "action": {
+        "type": "block",
+        "reason": "Quote rejected by sales manager: {{quote.manager_rejection_reason}}"
       },
       "execute": [
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "rejected_by_manager",
             "rejected_at": "{{now}}",
             "rejected_by": "{{sales_manager.id}}",
@@ -351,20 +238,12 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["{{sales_rep.email}}", "{{quote.created_by_email}}"],
-          "template": "quote_rejected_by_manager",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "sales_manager_name": "{{sales_manager.name}}",
-            "rejection_reason": "{{quote.manager_rejection_reason}}"
-          }
+          "message": "Quote {{quote.number}} for {{customer.name}} was rejected by {{sales_manager.name}}. Reason: {{quote.manager_rejection_reason}}"
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["#sales-notifications"],
+          "recipients": ["slack:#sales-notifications"],
           "message": "❌ Quote {{quote.number}} rejected by {{sales_manager.name}} - Reason: {{quote.manager_rejection_reason}}"
         }
       ]
@@ -373,28 +252,15 @@
       "id": "approve_quote",
       "type": "action",
       "name": "Approve quote and send to customer",
-      "action": "allow",
-      "metadata": {
-        "approved_by": "sales_manager",
-        "approval_chain": [
-          {
-            "level": "sales_rep",
-            "approved_by": "{{sales_rep.id}}",
-            "approved_at": "{{quote.rep_approved_at}}"
-          },
-          {
-            "level": "sales_manager",
-            "approved_by": "{{sales_manager.id}}",
-            "approved_at": "{{now}}"
-          }
-        ]
+      "action": {
+        "type": "allow"
       },
       "execute": [
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "approved",
             "approved_at": "{{now}}",
             "approved_by": "{{sales_manager.id}}",
@@ -404,22 +270,12 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["{{sales_rep.email}}"],
-          "template": "quote_fully_approved",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "quote_total": "{{quote.total}}",
-            "sales_manager_name": "{{sales_manager.name}}",
-            "manager_comments": "{{quote.manager_comments}}",
-            "send_to_customer_url": "{{quote.send_url}}"
-          }
+          "message": "Quote {{quote.number}} fully approved by {{sales_manager.name}}! ${{quote.total}} for {{customer.name}}. Manager comments: {{quote.manager_comments}}. Ready to send to customer."
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["#sales-wins"],
+          "recipients": ["slack:#sales-wins"],
           "message": "✅ Quote {{quote.number}} fully approved! ${{quote.total}} for {{customer.name}} - Ready to send to customer"
         },
         {
@@ -442,17 +298,15 @@
       "id": "auto_approve_quote",
       "type": "action",
       "name": "Auto-approve quote (below threshold)",
-      "action": "allow",
-      "metadata": {
-        "auto_approved": true,
-        "reason": "Quote below approval threshold"
+      "action": {
+        "type": "allow"
       },
       "execute": [
         {
           "type": "update_record",
           "entity": "quote",
           "entity_id": "{{quote.id}}",
-          "fields": {
+          "data": {
             "status": "approved",
             "approved_at": "{{now}}",
             "approved_by": "workflow_automation",
@@ -462,24 +316,10 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["{{quote.created_by_email}}"],
-          "template": "quote_auto_approved",
-          "data": {
-            "quote_number": "{{quote.number}}",
-            "customer_name": "{{customer.name}}",
-            "quote_total": "{{quote.total}}",
-            "send_to_customer_url": "{{quote.send_url}}"
-          }
+          "message": "Quote {{quote.number}} for {{customer.name}} (${{quote.total}}) was auto-approved and is ready to send to customer."
         }
       ]
-    },
-    {
-      "id": "block_quote",
-      "type": "action",
-      "name": "Block quote (failed approval)",
-      "action": "block",
-      "reason": "Quote approval process failed or expired"
     }
   ]
 }
