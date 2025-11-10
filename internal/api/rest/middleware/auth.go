@@ -9,6 +9,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 

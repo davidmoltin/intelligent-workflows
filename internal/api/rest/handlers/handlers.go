@@ -8,6 +8,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
+	"github.com/davidmoltin/intelligent-workflows/internal/websocket"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
 )
 
@@ -25,6 +26,7 @@ type Handlers struct {
 	Analytics    *AnalyticsHandler
 	Schedule     *ScheduleHandler
 	Audit        *AuditHandler
+	WebSocket    *websocket.Handler
 }
 
 // HealthCheckers holds all health check dependencies
@@ -46,6 +48,7 @@ func NewHandlers(
 	scheduleService ScheduleService,
 	workflowResumer *services.WorkflowResumerImpl,
 	aiService *services.AIService,
+	wsHub *websocket.Hub,
 	auditService *services.AuditService,
 	healthCheckers *HealthCheckers,
 	version string,
@@ -75,6 +78,7 @@ func NewHandlers(
 		Analytics:    NewAnalyticsHandler(log, analyticsRepo),
 		Schedule:     NewScheduleHandler(log, scheduleService),
 		Audit:        auditHandler,
+		WebSocket:    websocket.NewHandler(wsHub, log.Logger),
 	}
 }
 

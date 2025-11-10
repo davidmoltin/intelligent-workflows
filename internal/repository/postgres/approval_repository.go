@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/google/uuid"
@@ -63,6 +64,44 @@ func (r *ApprovalRepository) UpdateApproval(ctx context.Context, organizationID 
 
 	if err != nil {
 		return fmt.Errorf("failed to update approval: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("approval not found")
+	}
+
+	return nil
+}
+
+// UpdateApprovalStatus updates just the status-related fields of an approval
+func (r *ApprovalRepository) UpdateApprovalStatus(
+	ctx context.Context,
+	organizationID, id uuid.UUID,
+	status models.ApprovalStatus,
+	approverID *uuid.UUID,
+	decision *string,
+	decidedAt *time.Time,
+) error {
+	query := `
+		UPDATE approval_requests
+		SET status = $3,
+		    approver_id = $4,
+		    decision_reason = $5,
+		    decided_at = $6
+		WHERE organization_id = $1 AND id = $2`
+
+	result, err := r.db.ExecContext(
+		ctx, query,
+		organizationID, id, status, approverID, decision, decidedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update approval status: %w", err)
 	}
 
 	rows, err := result.RowsAffected()

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -255,12 +254,24 @@ func (h *OrganizationHandler) ListUsers(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	users, total, err := h.repo.ListUsers(r.Context(), orgID, limit, offset)
+	users, err := h.repo.GetOrganizationUsers(r.Context(), orgID)
 	if err != nil {
 		h.logger.Errorf("Failed to list organization users", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to list organization users")
 		return
 	}
+
+	// Apply pagination manually
+	total := int64(len(users))
+	start := offset
+	end := offset + limit
+	if start > len(users) {
+		start = len(users)
+	}
+	if end > len(users) {
+		end = len(users)
+	}
+	users = users[start:end]
 
 	response := map[string]interface{}{
 		"users":  users,

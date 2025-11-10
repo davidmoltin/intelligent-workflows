@@ -19,7 +19,7 @@ type WorkflowRepository interface {
 
 // EventRepository defines the interface for event persistence
 type EventRepository interface {
-	CreateEvent(ctx context.Context, organizationID uuid.UUID, event *models.Event) error
+	CreateEvent(ctx context.Context, event *models.Event) error
 	UpdateEvent(ctx context.Context, organizationID uuid.UUID, event *models.Event) error
 	GetEventByID(ctx context.Context, organizationID, id uuid.UUID) (*models.Event, error)
 }
@@ -68,7 +68,7 @@ func (er *EventRouter) RouteEvent(
 		ReceivedAt:     time.Now(),
 	}
 
-	if err := er.eventRepo.CreateEvent(ctx, organizationID, event); err != nil {
+	if err := er.eventRepo.CreateEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("failed to create event: %w", err)
 	}
 
@@ -157,7 +157,7 @@ func (er *EventRouter) safeExecuteWorkflow(
 
 			// Attempt to record the panic execution (best effort)
 			if er.executor.executionRepo != nil {
-				if err := er.executor.executionRepo.CreateExecution(ctx, organizationID, execution); err != nil {
+				if err := er.executor.executionRepo.CreateExecution(ctx, execution); err != nil {
 					er.logger.Errorf("Failed to record panic execution: %v", err)
 				}
 			}

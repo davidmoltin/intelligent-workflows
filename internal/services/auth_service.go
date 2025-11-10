@@ -355,7 +355,7 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (
 	}
 
 	// Update last used timestamp
-	if err := s.apiKeyRepo.UpdateLastUsed(ctx, apiKey.ID); err != nil {
+	if err := s.apiKeyRepo.UpdateLastUsed(ctx, apiKey.OrganizationID, apiKey.ID); err != nil {
 		s.logger.Warn("Failed to update API key last used", zap.Error(err))
 	}
 
@@ -363,8 +363,8 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (
 }
 
 // RevokeAPIKey revokes an API key
-func (s *AuthService) RevokeAPIKey(ctx context.Context, keyID uuid.UUID) error {
-	return s.apiKeyRepo.Revoke(ctx, keyID)
+func (s *AuthService) RevokeAPIKey(ctx context.Context, organizationID, keyID uuid.UUID) error {
+	return s.apiKeyRepo.Revoke(ctx, organizationID, keyID)
 }
 
 // ChangePassword changes a user's password

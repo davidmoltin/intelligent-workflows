@@ -273,9 +273,8 @@ func (s *ApprovalService) ExpireOldApprovals(ctx context.Context) error {
 	s.logger.Infof("Checking for expired approvals")
 
 	// This would be run periodically by a background worker
-	// Get all pending approvals
-	status := models.ApprovalStatusPending
-	approvals, _, err := s.approvalRepo.ListApprovals(ctx, &status, nil, 1000, 0)
+	// Get all expired approvals across all organizations (uuid.Nil = all orgs)
+	approvals, err := s.approvalRepo.GetExpiredApprovals(ctx, uuid.Nil, 1000)
 	if err != nil {
 		return fmt.Errorf("failed to list approvals: %w", err)
 	}
@@ -284,25 +283,22 @@ func (s *ApprovalService) ExpireOldApprovals(ctx context.Context) error {
 	expiredCount := 0
 
 	for _, approval := range approvals {
-		if approval.ExpiresAt != nil && now.After(*approval.ExpiresAt) {
-			// Mark as expired
-			approval.Status = models.ApprovalStatusExpired
-			approval.DecidedAt = &now
+		// Mark as expired
+		newStatus := models.ApprovalStatusExpired
 
-			if err := s.approvalRepo.UpdateApproval(ctx, &approval); err != nil {
-				s.logger.Errorf("Failed to expire approval %s: %v", approval.RequestID, err)
-				continue
-			}
+		if err := s.approvalRepo.UpdateApprovalStatus(ctx, approval.OrganizationID, approval.ID, newStatus, nil, nil, &now); err != nil {
+			s.logger.Errorf("Failed to expire approval %s: %v", approval.RequestID, err)
+			continue
+		}
 
-			expiredCount++
-			s.logger.Infof("Approval expired: %s", approval.RequestID)
+		expiredCount++
+		s.logger.Infof("Approval expired: %s", approval.RequestID)
 
-			// Send expiration notification
-			if s.notificationSvc != nil {
-				requesterEmail := s.defaultApproverEmail // In real implementation, look up requester email
-				if err := s.notificationSvc.SendApprovalDecisionNotification(ctx, &approval, requesterEmail); err != nil {
-					s.logger.Errorf("Failed to send expiration notification for %s: %v", approval.RequestID, err)
-				}
+		// Send expiration notification
+		if s.notificationSvc != nil {
+			requesterEmail := s.defaultApproverEmail // In real implementation, look up requester email
+			if err := s.notificationSvc.SendApprovalDecisionNotification(ctx, &approval, requesterEmail); err != nil {
+				s.logger.Errorf("Failed to send expiration notification for %s: %v", approval.RequestID, err)
 			}
 		}
 	}

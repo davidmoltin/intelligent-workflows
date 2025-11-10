@@ -218,7 +218,13 @@ func (h *AuthHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.authService.RevokeAPIKey(r.Context(), id); err != nil {
+	// Get organization ID from context (set by auth middleware)
+	organizationID, ok := r.Context().Value("organization_id").(uuid.UUID)
+	if !ok {
+		organizationID = uuid.Nil
+	}
+
+	if err := h.authService.RevokeAPIKey(r.Context(), organizationID, id); err != nil {
 		h.logger.Errorf("Failed to revoke API key", logger.Err(err))
 		h.respondError(w, http.StatusInternalServerError, "Failed to revoke API key")
 		return
