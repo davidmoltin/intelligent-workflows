@@ -90,6 +90,12 @@ func (r *Router) SetupRoutes() {
 	r.router.Get("/health", r.handlers.Health.Health)
 	r.router.Get("/ready", r.handlers.Health.Ready)
 
+	// WebSocket endpoint (requires authentication)
+	r.router.Group(func(router chi.Router) {
+		router.Use(customMiddleware.OptionalAuth(r.authService, r.logger))
+		router.HandleFunc("/ws", r.handlers.WebSocket.HandleWebSocket)
+	})
+
 	// API v1
 	r.router.Route("/api/v1", func(router chi.Router) {
 		// API Documentation (public)
@@ -187,33 +193,69 @@ func (r *Router) SetupRoutes() {
 				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}/next-runs", r.handlers.Schedule.GetNextRuns)
 			})
 
-			// Rules
-			router.Route("/rules", func(router chi.Router) {
-				// Read operations
-				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/", r.handlers.Rule.List)
-				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}", r.handlers.Rule.Get)
+			// Audit logs (only if audit handler is configured)
+			if r.handlers.Audit != nil {
+				router.Route("/audit-logs", func(router chi.Router) {
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/", r.handlers.Audit.ListAuditLogs)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/{id}", r.handlers.Audit.GetAuditLog)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/entity/{entity_type}/{entity_id}", r.handlers.Audit.GetEntityAuditLogs)
+					router.With(customMiddleware.RequirePermission("audit:read", r.logger)).Get("/actor/{actor_id}", r.handlers.Audit.GetActorAuditLogs)
+				})
+			}
 
-				// Write operations
-				router.With(customMiddleware.RequirePermission("workflow:create", r.logger)).Post("/", r.handlers.Rule.Create)
-				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Put("/{id}", r.handlers.Rule.Update)
-				router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Rule.Delete)
-				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/enable", r.handlers.Rule.Enable)
-				router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/disable", r.handlers.Rule.Disable)
+			// Organizations
+			router.Route("/organizations", func(router chi.Router) {
+				// List user's organizations and create
+				router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/", r.handlers.Organization.List)
+				router.With(customMiddleware.RequirePermission("organization:create", r.logger)).Post("/", r.handlers.Organization.Create)
 
-				// Test operation
-				router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Post("/{id}/test", r.handlers.Rule.TestRule)
+				// Get by slug
+				router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/slug/{slug}", r.handlers.Organization.GetBySlug)
+
+				// Operations on specific organizations
+				router.Route("/{id}", func(router chi.Router) {
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/", r.handlers.Organization.Get)
+					router.With(customMiddleware.RequirePermission("organization:update", r.logger)).Put("/", r.handlers.Organization.Update)
+					router.With(customMiddleware.RequirePermission("organization:delete", r.logger)).Delete("/", r.handlers.Organization.Delete)
+
+					// User management within organization
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/users", r.handlers.Organization.ListUsers)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Post("/users", r.handlers.Organization.AddUser)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Delete("/users/{user_id}", r.handlers.Organization.RemoveUser)
+					router.With(customMiddleware.RequirePermission("organization:manage_users", r.logger)).Put("/users/{user_id}/role", r.handlers.Organization.UpdateUserRole)
+
+					// Access check
+					router.With(customMiddleware.RequirePermission("organization:read", r.logger)).Get("/access", r.handlers.Organization.CheckUserAccess)
+				})
 			})
 		})
 
-		// AI endpoints (only if AI service is configured)
-		if r.handlers.AI != nil {
-			router.Route("/ai", func(router chi.Router) {
-				router.Post("/chat", r.handlers.AI.Chat)
-				router.Get("/capabilities", r.handlers.AI.GetCapabilities)
-				router.Post("/interpret", r.handlers.AI.InterpretWorkflow)
-			})
-		}
+		// Rules
+		router.Route("/rules", func(router chi.Router) {
+			// Read operations
+			router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/", r.handlers.Rule.List)
+			router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Get("/{id}", r.handlers.Rule.Get)
+
+			// Write operations
+			router.With(customMiddleware.RequirePermission("workflow:create", r.logger)).Post("/", r.handlers.Rule.Create)
+			router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Put("/{id}", r.handlers.Rule.Update)
+			router.With(customMiddleware.RequirePermission("workflow:delete", r.logger)).Delete("/{id}", r.handlers.Rule.Delete)
+			router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/enable", r.handlers.Rule.Enable)
+			router.With(customMiddleware.RequirePermission("workflow:update", r.logger)).Post("/{id}/disable", r.handlers.Rule.Disable)
+
+			// Test operation
+			router.With(customMiddleware.RequirePermission("workflow:read", r.logger)).Post("/{id}/test", r.handlers.Rule.TestRule)
+		})
 	})
+
+	// AI endpoints (only if AI service is configured)
+	if r.handlers.AI != nil {
+		r.router.Route("/api/v1/ai", func(router chi.Router) {
+			router.Post("/chat", r.handlers.AI.Chat)
+			router.Get("/capabilities", r.handlers.AI.GetCapabilities)
+			router.Post("/interpret", r.handlers.AI.InterpretWorkflow)
+		})
+	}
 }
 
 // Handler returns the http.Handler

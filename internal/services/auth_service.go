@@ -18,6 +18,7 @@ type AuthService struct {
 	userRepo         *postgres.UserRepository
 	apiKeyRepo       *postgres.APIKeyRepository
 	refreshTokenRepo *postgres.RefreshTokenRepository
+	orgRepo          *postgres.OrganizationRepository
 	jwtManager       *auth.JWTManager
 	logger           *logger.Logger
 }
@@ -27,6 +28,7 @@ func NewAuthService(
 	userRepo *postgres.UserRepository,
 	apiKeyRepo *postgres.APIKeyRepository,
 	refreshTokenRepo *postgres.RefreshTokenRepository,
+	orgRepo *postgres.OrganizationRepository,
 	jwtManager *auth.JWTManager,
 	log *logger.Logger,
 ) *AuthService {
@@ -34,6 +36,7 @@ func NewAuthService(
 		userRepo:         userRepo,
 		apiKeyRepo:       apiKeyRepo,
 		refreshTokenRepo: refreshTokenRepo,
+		orgRepo:          orgRepo,
 		jwtManager:       jwtManager,
 		logger:           log,
 	}
@@ -97,6 +100,20 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
+	// Get user's organizations
+	orgs, err := s.orgRepo.GetUserOrganizations(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user organizations: %w", err)
+	}
+
+	// Ensure user belongs to at least one organization
+	if len(orgs) == 0 {
+		return nil, fmt.Errorf("user does not belong to any organization")
+	}
+
+	// Use the first organization as default (in future, we can add user preference for default org)
+	organizationID := orgs[0].ID
+
 	// Get user roles and permissions
 	roles, err := s.userRepo.GetUserRoles(ctx, user.ID)
 	if err != nil {
@@ -108,9 +125,10 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, fmt.Errorf("failed to get user permissions: %w", err)
 	}
 
-	// Generate access token
+	// Generate access token with organization ID
 	accessToken, err := s.jwtManager.GenerateAccessToken(
 		user.ID,
+		organizationID,
 		user.Username,
 		user.Email,
 		roles,
@@ -188,6 +206,20 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, fmt.Errorf("user account is disabled")
 	}
 
+	// Get user's organizations
+	orgs, err := s.orgRepo.GetUserOrganizations(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user organizations: %w", err)
+	}
+
+	// Ensure user belongs to at least one organization
+	if len(orgs) == 0 {
+		return nil, fmt.Errorf("user does not belong to any organization")
+	}
+
+	// Use the first organization as default
+	organizationID := orgs[0].ID
+
 	// Get user roles and permissions
 	roles, err := s.userRepo.GetUserRoles(ctx, user.ID)
 	if err != nil {
@@ -199,9 +231,10 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, fmt.Errorf("failed to get user permissions: %w", err)
 	}
 
-	// Generate new access token
+	// Generate new access token with organization ID
 	accessToken, err := s.jwtManager.GenerateAccessToken(
 		user.ID,
+		organizationID,
 		user.Username,
 		user.Email,
 		roles,
@@ -255,7 +288,7 @@ func (s *AuthService) ValidateAccessToken(tokenString string) (*auth.JWTClaims, 
 }
 
 // CreateAPIKey creates a new API key for a user
-func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *models.CreateAPIKeyRequest) (*models.CreateAPIKeyResponse, error) {
+func (s *AuthService) CreateAPIKey(ctx context.Context, organizationID, userID uuid.UUID, req *models.CreateAPIKeyRequest) (*models.CreateAPIKeyResponse, error) {
 	// Generate API key
 	apiKeyString, err := auth.GenerateAPIKey()
 	if err != nil {
@@ -264,14 +297,15 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *m
 
 	// Create API key record
 	apiKey := &models.APIKey{
-		KeyHash:   auth.HashAPIKey(apiKeyString),
-		KeyPrefix: auth.GetAPIKeyPrefix(apiKeyString),
-		Name:      req.Name,
-		UserID:    userID,
-		Scopes:    req.Scopes,
-		IsActive:  true,
-		ExpiresAt: req.ExpiresAt,
-		CreatedBy: &userID,
+		OrganizationID: organizationID,
+		KeyHash:        auth.HashAPIKey(apiKeyString),
+		KeyPrefix:      auth.GetAPIKeyPrefix(apiKeyString),
+		Name:           req.Name,
+		UserID:         userID,
+		Scopes:         req.Scopes,
+		IsActive:       true,
+		ExpiresAt:      req.ExpiresAt,
+		CreatedBy:      &userID,
 	}
 
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
@@ -289,48 +323,48 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID uuid.UUID, req *m
 }
 
 // ValidateAPIKey validates an API key and returns the associated user
-func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (*models.User, []string, error) {
+func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKeyString string) (*models.User, uuid.UUID, []string, error) {
 	// Hash the API key
 	keyHash := auth.HashAPIKey(apiKeyString)
 
 	// Get API key from database
 	apiKey, err := s.apiKeyRepo.GetByHash(ctx, keyHash)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid API key")
+		return nil, uuid.Nil, nil, fmt.Errorf("invalid API key")
 	}
 
 	// Check if API key is active
 	if !apiKey.IsActive {
-		return nil, nil, fmt.Errorf("API key is disabled")
+		return nil, uuid.Nil, nil, fmt.Errorf("API key is disabled")
 	}
 
 	// Check if API key is expired
 	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-		return nil, nil, fmt.Errorf("API key expired")
+		return nil, uuid.Nil, nil, fmt.Errorf("API key expired")
 	}
 
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("user not found")
+		return nil, uuid.Nil, nil, fmt.Errorf("user not found")
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		return nil, nil, fmt.Errorf("user account is disabled")
+		return nil, uuid.Nil, nil, fmt.Errorf("user account is disabled")
 	}
 
 	// Update last used timestamp
-	if err := s.apiKeyRepo.UpdateLastUsed(ctx, apiKey.ID); err != nil {
+	if err := s.apiKeyRepo.UpdateLastUsed(ctx, apiKey.OrganizationID, apiKey.ID); err != nil {
 		s.logger.Warn("Failed to update API key last used", zap.Error(err))
 	}
 
-	return user, apiKey.Scopes, nil
+	return user, apiKey.OrganizationID, apiKey.Scopes, nil
 }
 
 // RevokeAPIKey revokes an API key
-func (s *AuthService) RevokeAPIKey(ctx context.Context, keyID uuid.UUID) error {
-	return s.apiKeyRepo.Revoke(ctx, keyID)
+func (s *AuthService) RevokeAPIKey(ctx context.Context, organizationID, keyID uuid.UUID) error {
+	return s.apiKeyRepo.Revoke(ctx, organizationID, keyID)
 }
 
 // ChangePassword changes a user's password

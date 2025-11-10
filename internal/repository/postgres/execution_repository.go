@@ -23,15 +23,15 @@ func NewExecutionRepository(db *sql.DB) *ExecutionRepository {
 func (r *ExecutionRepository) CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
 	query := `
 		INSERT INTO workflow_executions (
-			id, workflow_id, execution_id, trigger_event, trigger_payload,
+			id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 			context, status, result, started_at, completed_at, duration_ms,
 			error_message, metadata, timeout_at, timeout_duration
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id, started_at`
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		execution.ID, execution.WorkflowID, execution.ExecutionID,
+		execution.ID, execution.OrganizationID, execution.WorkflowID, execution.ExecutionID,
 		execution.TriggerEvent, execution.TriggerPayload, execution.Context,
 		execution.Status, execution.Result, execution.StartedAt,
 		execution.CompletedAt, execution.DurationMs, execution.ErrorMessage,
@@ -46,28 +46,28 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, execution *mo
 }
 
 // UpdateExecution updates an execution
-func (r *ExecutionRepository) UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error {
+func (r *ExecutionRepository) UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error {
 	query := `
 		UPDATE workflow_executions
-		SET context = $2,
-		    status = $3,
-		    result = $4,
-		    completed_at = $5,
-		    duration_ms = $6,
-		    error_message = $7,
-		    metadata = $8,
-		    paused_at = $9,
-		    paused_reason = $10,
-		    paused_step_id = $11,
-		    next_step_id = $12,
-		    resume_data = $13,
-		    resume_count = $14,
-		    last_resumed_at = $15
-		WHERE id = $1`
+		SET context = $3,
+		    status = $4,
+		    result = $5,
+		    completed_at = $6,
+		    duration_ms = $7,
+		    error_message = $8,
+		    metadata = $9,
+		    paused_at = $10,
+		    paused_reason = $11,
+		    paused_step_id = $12,
+		    next_step_id = $13,
+		    resume_data = $14,
+		    resume_count = $15,
+		    last_resumed_at = $16
+		WHERE organization_id = $1 AND id = $2`
 
 	result, err := r.db.ExecContext(
 		ctx, query,
-		execution.ID, execution.Context, execution.Status,
+		organizationID, execution.ID, execution.Context, execution.Status,
 		execution.Result, execution.CompletedAt, execution.DurationMs,
 		execution.ErrorMessage, execution.Metadata,
 		execution.PausedAt, execution.PausedReason, execution.PausedStepID,
@@ -91,19 +91,19 @@ func (r *ExecutionRepository) UpdateExecution(ctx context.Context, execution *mo
 	return nil
 }
 
-// GetExecutionByID retrieves an execution by ID
-func (r *ExecutionRepository) GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error) {
+// GetExecutionByID retrieves an execution by ID within an organization
+func (r *ExecutionRepository) GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error) {
 	execution := &models.WorkflowExecution{}
 	query := `
-		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		SELECT id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
 		       error_message, metadata, paused_at, paused_reason, paused_step_id,
 		       next_step_id, resume_data, resume_count, last_resumed_at
 		FROM workflow_executions
-		WHERE id = $1`
+		WHERE organization_id = $1 AND id = $2`
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+	err := r.db.QueryRowContext(ctx, query, organizationID, id).Scan(
+		&execution.ID, &execution.OrganizationID, &execution.WorkflowID, &execution.ExecutionID,
 		&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 		&execution.Status, &execution.Result, &execution.StartedAt,
 		&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
@@ -122,18 +122,18 @@ func (r *ExecutionRepository) GetExecutionByID(ctx context.Context, id uuid.UUID
 	return execution, nil
 }
 
-// GetExecutionByExecutionID retrieves an execution by execution_id string
-func (r *ExecutionRepository) GetExecutionByExecutionID(ctx context.Context, executionID string) (*models.WorkflowExecution, error) {
+// GetExecutionByExecutionID retrieves an execution by execution_id string within an organization
+func (r *ExecutionRepository) GetExecutionByExecutionID(ctx context.Context, organizationID uuid.UUID, executionID string) (*models.WorkflowExecution, error) {
 	execution := &models.WorkflowExecution{}
 	query := `
-		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		SELECT id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
 		       error_message, metadata
 		FROM workflow_executions
-		WHERE execution_id = $1`
+		WHERE organization_id = $1 AND execution_id = $2`
 
-	err := r.db.QueryRowContext(ctx, query, executionID).Scan(
-		&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+	err := r.db.QueryRowContext(ctx, query, organizationID, executionID).Scan(
+		&execution.ID, &execution.OrganizationID, &execution.WorkflowID, &execution.ExecutionID,
 		&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 		&execution.Status, &execution.Result, &execution.StartedAt,
 		&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
@@ -150,9 +150,10 @@ func (r *ExecutionRepository) GetExecutionByExecutionID(ctx context.Context, exe
 	return execution, nil
 }
 
-// ListExecutions retrieves executions with pagination and filters
+// ListExecutions retrieves executions with pagination and filters within an organization
 func (r *ExecutionRepository) ListExecutions(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	workflowID *uuid.UUID,
 	status *models.ExecutionStatus,
 	limit, offset int,
@@ -161,27 +162,29 @@ func (r *ExecutionRepository) ListExecutions(
 	countQuery := `
 		SELECT COUNT(*)
 		FROM workflow_executions
-		WHERE ($1::uuid IS NULL OR workflow_id = $1)
-		  AND ($2::varchar IS NULL OR status = $2)`
+		WHERE organization_id = $1
+		  AND ($2::uuid IS NULL OR workflow_id = $2)
+		  AND ($3::varchar IS NULL OR status = $3)`
 
 	var total int64
-	err := r.db.QueryRowContext(ctx, countQuery, workflowID, status).Scan(&total)
+	err := r.db.QueryRowContext(ctx, countQuery, organizationID, workflowID, status).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count executions: %w", err)
 	}
 
 	// Get executions
 	query := `
-		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		SELECT id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
 		       error_message, metadata
 		FROM workflow_executions
-		WHERE ($1::uuid IS NULL OR workflow_id = $1)
-		  AND ($2::varchar IS NULL OR status = $2)
+		WHERE organization_id = $1
+		  AND ($2::uuid IS NULL OR workflow_id = $2)
+		  AND ($3::varchar IS NULL OR status = $3)
 		ORDER BY started_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $4 OFFSET $5`
 
-	rows, err := r.db.QueryContext(ctx, query, workflowID, status, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, workflowID, status, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list executions: %w", err)
 	}
@@ -191,7 +194,7 @@ func (r *ExecutionRepository) ListExecutions(
 	for rows.Next() {
 		execution := models.WorkflowExecution{}
 		err := rows.Scan(
-			&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+			&execution.ID, &execution.OrganizationID, &execution.WorkflowID, &execution.ExecutionID,
 			&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 			&execution.Status, &execution.Result, &execution.StartedAt,
 			&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
@@ -210,14 +213,14 @@ func (r *ExecutionRepository) ListExecutions(
 func (r *ExecutionRepository) CreateStepExecution(ctx context.Context, step *models.StepExecution) error {
 	query := `
 		INSERT INTO step_executions (
-			id, execution_id, step_id, step_type, status,
+			id, organization_id, execution_id, step_id, step_type, status,
 			input, output, started_at, completed_at, duration_ms, error_message
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, started_at`
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		step.ID, step.ExecutionID, step.StepID, step.StepType,
+		step.ID, step.OrganizationID, step.ExecutionID, step.StepID, step.StepType,
 		step.Status, step.Input, step.Output, step.StartedAt,
 		step.CompletedAt, step.DurationMs, step.ErrorMessage,
 	).Scan(&step.ID, &step.StartedAt)
@@ -230,19 +233,19 @@ func (r *ExecutionRepository) CreateStepExecution(ctx context.Context, step *mod
 }
 
 // UpdateStepExecution updates a step execution
-func (r *ExecutionRepository) UpdateStepExecution(ctx context.Context, step *models.StepExecution) error {
+func (r *ExecutionRepository) UpdateStepExecution(ctx context.Context, organizationID uuid.UUID, step *models.StepExecution) error {
 	query := `
 		UPDATE step_executions
-		SET status = $2,
-		    output = $3,
-		    completed_at = $4,
-		    duration_ms = $5,
-		    error_message = $6
-		WHERE id = $1`
+		SET status = $3,
+		    output = $4,
+		    completed_at = $5,
+		    duration_ms = $6,
+		    error_message = $7
+		WHERE organization_id = $1 AND id = $2`
 
 	result, err := r.db.ExecContext(
 		ctx, query,
-		step.ID, step.Status, step.Output, step.CompletedAt,
+		organizationID, step.ID, step.Status, step.Output, step.CompletedAt,
 		step.DurationMs, step.ErrorMessage,
 	)
 
@@ -262,16 +265,16 @@ func (r *ExecutionRepository) UpdateStepExecution(ctx context.Context, step *mod
 	return nil
 }
 
-// GetStepExecutions retrieves all step executions for an execution
-func (r *ExecutionRepository) GetStepExecutions(ctx context.Context, executionID uuid.UUID) ([]models.StepExecution, error) {
+// GetStepExecutions retrieves all step executions for an execution within an organization
+func (r *ExecutionRepository) GetStepExecutions(ctx context.Context, organizationID, executionID uuid.UUID) ([]models.StepExecution, error) {
 	query := `
-		SELECT id, execution_id, step_id, step_type, status,
+		SELECT id, organization_id, execution_id, step_id, step_type, status,
 		       input, output, started_at, completed_at, duration_ms, error_message
 		FROM step_executions
-		WHERE execution_id = $1
+		WHERE organization_id = $1 AND execution_id = $2
 		ORDER BY started_at ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, executionID)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, executionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get step executions: %w", err)
 	}
@@ -281,7 +284,7 @@ func (r *ExecutionRepository) GetStepExecutions(ctx context.Context, executionID
 	for rows.Next() {
 		step := models.StepExecution{}
 		err := rows.Scan(
-			&step.ID, &step.ExecutionID, &step.StepID, &step.StepType,
+			&step.ID, &step.OrganizationID, &step.ExecutionID, &step.StepID, &step.StepType,
 			&step.Status, &step.Input, &step.Output, &step.StartedAt,
 			&step.CompletedAt, &step.DurationMs, &step.ErrorMessage,
 		)
@@ -295,15 +298,15 @@ func (r *ExecutionRepository) GetStepExecutions(ctx context.Context, executionID
 }
 
 // GetExecutionTrace retrieves full execution trace with steps
-func (r *ExecutionRepository) GetExecutionTrace(ctx context.Context, id uuid.UUID) (*models.ExecutionTraceResponse, error) {
+func (r *ExecutionRepository) GetExecutionTrace(ctx context.Context, organizationID, id uuid.UUID) (*models.ExecutionTraceResponse, error) {
 	// Get execution
-	execution, err := r.GetExecutionByID(ctx, id)
+	execution, err := r.GetExecutionByID(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get steps
-	steps, err := r.GetStepExecutions(ctx, id)
+	steps, err := r.GetStepExecutions(ctx, organizationID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -316,19 +319,19 @@ func (r *ExecutionRepository) GetExecutionTrace(ctx context.Context, id uuid.UUI
 	return trace, nil
 }
 
-// GetPausedExecutions retrieves paused executions ordered by paused_at
-func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
+// GetPausedExecutions retrieves paused executions within an organization
+func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, organizationID uuid.UUID, limit int) ([]*models.WorkflowExecution, error) {
 	query := `
-		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		SELECT id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
 		       error_message, metadata, paused_at, paused_reason, paused_step_id,
 		       next_step_id, resume_data, resume_count, last_resumed_at
 		FROM workflow_executions
-		WHERE status = $1
+		WHERE organization_id = $1 AND status = $2
 		ORDER BY paused_at ASC
-		LIMIT $2`
+		LIMIT $3`
 
-	rows, err := r.db.QueryContext(ctx, query, models.ExecutionStatusPaused, limit)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, models.ExecutionStatusPaused, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paused executions: %w", err)
 	}
@@ -338,7 +341,7 @@ func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, limit int
 	for rows.Next() {
 		execution := &models.WorkflowExecution{}
 		err := rows.Scan(
-			&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+			&execution.ID, &execution.OrganizationID, &execution.WorkflowID, &execution.ExecutionID,
 			&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 			&execution.Status, &execution.Result, &execution.StartedAt,
 			&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
@@ -359,22 +362,24 @@ func (r *ExecutionRepository) GetPausedExecutions(ctx context.Context, limit int
 	return executions, nil
 }
 
-// GetTimedOutExecutions retrieves executions that have exceeded their timeout
-func (r *ExecutionRepository) GetTimedOutExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error) {
+// GetTimedOutExecutions retrieves executions that have exceeded their timeout within an organization
+func (r *ExecutionRepository) GetTimedOutExecutions(ctx context.Context, organizationID uuid.UUID, limit int) ([]*models.WorkflowExecution, error) {
 	query := `
-		SELECT id, workflow_id, execution_id, trigger_event, trigger_payload,
+		SELECT id, organization_id, workflow_id, execution_id, trigger_event, trigger_payload,
 		       context, status, result, started_at, completed_at, duration_ms,
 		       error_message, metadata, paused_at, paused_reason, paused_step_id,
 		       next_step_id, resume_data, resume_count, last_resumed_at,
 		       timeout_at, timeout_duration
 		FROM workflow_executions
-		WHERE timeout_at IS NOT NULL
+		WHERE organization_id = $1
+		  AND timeout_at IS NOT NULL
 		  AND timeout_at < NOW()
-		  AND status IN ($1, $2)
+		  AND status IN ($2, $3)
 		ORDER BY timeout_at ASC
-		LIMIT $3`
+		LIMIT $4`
 
 	rows, err := r.db.QueryContext(ctx, query,
+		organizationID,
 		models.ExecutionStatusRunning,
 		models.ExecutionStatusWaiting,
 		limit)
@@ -387,7 +392,7 @@ func (r *ExecutionRepository) GetTimedOutExecutions(ctx context.Context, limit i
 	for rows.Next() {
 		execution := &models.WorkflowExecution{}
 		err := rows.Scan(
-			&execution.ID, &execution.WorkflowID, &execution.ExecutionID,
+			&execution.ID, &execution.OrganizationID, &execution.WorkflowID, &execution.ExecutionID,
 			&execution.TriggerEvent, &execution.TriggerPayload, &execution.Context,
 			&execution.Status, &execution.Result, &execution.StartedAt,
 			&execution.CompletedAt, &execution.DurationMs, &execution.ErrorMessage,
@@ -407,4 +412,37 @@ func (r *ExecutionRepository) GetTimedOutExecutions(ctx context.Context, limit i
 	}
 
 	return executions, nil
+}
+
+// CancelExecution cancels a running execution
+func (r *ExecutionRepository) CancelExecution(ctx context.Context, organizationID, id uuid.UUID) error {
+	query := `
+		UPDATE workflow_executions
+		SET status = $3,
+		    completed_at = NOW(),
+		    duration_ms = EXTRACT(EPOCH FROM (NOW() - started_at))::INTEGER * 1000
+		WHERE organization_id = $1 AND id = $2 AND status IN ($4, $5)`
+
+	result, err := r.db.ExecContext(ctx, query,
+		organizationID,
+		id,
+		models.ExecutionStatusCancelled,
+		models.ExecutionStatusRunning,
+		models.ExecutionStatusWaiting,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to cancel execution: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("execution not found or not in cancellable state")
+	}
+
+	return nil
 }

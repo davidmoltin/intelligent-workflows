@@ -19,15 +19,16 @@ const (
 
 // Rule represents a reusable rule
 type Rule struct {
-	ID          uuid.UUID      `json:"id" db:"id"`
-	RuleID      string         `json:"rule_id" db:"rule_id"`
-	Name        string         `json:"name" db:"name"`
-	Description *string        `json:"description,omitempty" db:"description"`
-	RuleType    RuleType       `json:"rule_type" db:"rule_type"`
-	Definition  RuleDefinition `json:"definition" db:"definition"`
-	Enabled     bool           `json:"enabled" db:"enabled"`
-	CreatedAt   time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID      `json:"id" db:"id"`
+	OrganizationID uuid.UUID      `json:"organization_id" db:"organization_id"`
+	RuleID         string         `json:"rule_id" db:"rule_id"`
+	Name           string         `json:"name" db:"name"`
+	Description    *string        `json:"description,omitempty" db:"description"`
+	RuleType       RuleType       `json:"rule_type" db:"rule_type"`
+	Definition     RuleDefinition `json:"definition" db:"definition"`
+	Enabled        bool           `json:"enabled" db:"enabled"`
+	CreatedAt      time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at" db:"updated_at"`
 }
 
 // RuleDefinition represents the rule logic

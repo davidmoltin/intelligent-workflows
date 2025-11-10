@@ -13,9 +13,9 @@ import (
 // ExecutionRepository defines the interface for execution persistence
 type ExecutionRepository interface {
 	CreateExecution(ctx context.Context, execution *models.WorkflowExecution) error
-	UpdateExecution(ctx context.Context, execution *models.WorkflowExecution) error
-	GetExecutionByID(ctx context.Context, id uuid.UUID) (*models.WorkflowExecution, error)
-	GetPausedExecutions(ctx context.Context, limit int) ([]*models.WorkflowExecution, error)
+	UpdateExecution(ctx context.Context, organizationID uuid.UUID, execution *models.WorkflowExecution) error
+	GetExecutionByID(ctx context.Context, organizationID, id uuid.UUID) (*models.WorkflowExecution, error)
+	GetPausedExecutions(ctx context.Context, organizationID uuid.UUID, limit int) ([]*models.WorkflowExecution, error)
 }
 
 // WorkflowEngine defines the interface for workflow execution
@@ -28,14 +28,16 @@ type WorkflowResumerImpl struct {
 	logger        *logger.Logger
 	executionRepo ExecutionRepository
 	engine        WorkflowEngine
+	auditService  *AuditService
 }
 
 // NewWorkflowResumer creates a new workflow resumer
-func NewWorkflowResumer(log *logger.Logger, executionRepo ExecutionRepository, engine WorkflowEngine) *WorkflowResumerImpl {
+func NewWorkflowResumer(log *logger.Logger, executionRepo ExecutionRepository, engine WorkflowEngine, auditService *AuditService) *WorkflowResumerImpl {
 	return &WorkflowResumerImpl{
 		logger:        log,
 		executionRepo: executionRepo,
 		engine:        engine,
+		auditService:  auditService,
 	}
 }
 
@@ -47,8 +49,8 @@ func (w *WorkflowResumerImpl) PauseExecution(ctx context.Context, executionID uu
 		return fmt.Errorf("execution repository not configured")
 	}
 
-	// Get current execution
-	execution, err := w.executionRepo.GetExecutionByID(ctx, executionID)
+	// Get current execution (using uuid.Nil for cross-org access in admin context)
+	execution, err := w.executionRepo.GetExecutionByID(ctx, uuid.Nil, executionID)
 	if err != nil {
 		w.logger.Errorf("Failed to get execution %s: %v", executionID, err)
 		return fmt.Errorf("failed to get execution: %w", err)
@@ -69,9 +71,18 @@ func (w *WorkflowResumerImpl) PauseExecution(ctx context.Context, executionID uu
 	}
 
 	// Save updated execution
-	if err := w.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := w.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		w.logger.Errorf("Failed to pause execution %s: %v", executionID, err)
 		return fmt.Errorf("failed to update execution: %w", err)
+	}
+
+	// Log audit event
+	// TODO: Extract actor ID from context instead of using system actor
+	if w.auditService != nil {
+		systemActorID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
+		if err := w.auditService.LogExecutionPaused(ctx, executionID, systemActorID, "system", reason); err != nil {
+			w.logger.Errorf("Failed to log audit event for execution pause: %v", err)
+		}
 	}
 
 	w.logger.Infof("Successfully paused execution %s", executionID)
@@ -88,8 +99,8 @@ func (w *WorkflowResumerImpl) ResumeWorkflow(ctx context.Context, executionID uu
 		return nil
 	}
 
-	// Get paused execution
-	execution, err := w.executionRepo.GetExecutionByID(ctx, executionID)
+	// Get paused execution (using uuid.Nil for cross-org access in admin context)
+	execution, err := w.executionRepo.GetExecutionByID(ctx, uuid.Nil, executionID)
 	if err != nil {
 		w.logger.Errorf("Failed to get execution %s: %v", executionID, err)
 		return fmt.Errorf("failed to get execution: %w", err)
@@ -119,8 +130,8 @@ func (w *WorkflowResumerImpl) ResumeExecution(ctx context.Context, executionID u
 		return fmt.Errorf("execution repository not configured")
 	}
 
-	// Get paused execution
-	execution, err := w.executionRepo.GetExecutionByID(ctx, executionID)
+	// Get paused execution (using uuid.Nil for cross-org access in admin context)
+	execution, err := w.executionRepo.GetExecutionByID(ctx, uuid.Nil, executionID)
 	if err != nil {
 		w.logger.Errorf("Failed to get execution %s: %v", executionID, err)
 		return fmt.Errorf("failed to get execution: %w", err)
@@ -156,7 +167,7 @@ func (w *WorkflowResumerImpl) resumeExecution(ctx context.Context, execution *mo
 	execution.PausedReason = nil
 
 	// Save updated execution
-	if err := w.executionRepo.UpdateExecution(ctx, execution); err != nil {
+	if err := w.executionRepo.UpdateExecution(ctx, execution.OrganizationID, execution); err != nil {
 		w.logger.Errorf("Failed to update execution %s: %v", execution.ID, err)
 		return fmt.Errorf("failed to update execution: %w", err)
 	}
@@ -171,6 +182,15 @@ func (w *WorkflowResumerImpl) resumeExecution(ctx context.Context, execution *mo
 		w.logger.Warn("Workflow engine not configured, execution state updated but not resumed")
 	}
 
+	// Log audit event
+	// TODO: Extract actor ID from context instead of using system actor
+	if w.auditService != nil {
+		systemActorID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
+		if err := w.auditService.LogExecutionResumed(ctx, execution.ID, systemActorID, "system"); err != nil {
+			w.logger.Errorf("Failed to log audit event for execution resume: %v", err)
+		}
+	}
+
 	w.logger.Infof("Successfully resumed execution %s (resume count: %d)", execution.ID, execution.ResumeCount)
 	return nil
 }
@@ -181,7 +201,8 @@ func (w *WorkflowResumerImpl) GetPausedExecutions(ctx context.Context, limit int
 		return nil, fmt.Errorf("execution repository not configured")
 	}
 
-	executions, err := w.executionRepo.GetPausedExecutions(ctx, limit)
+	// Get paused executions across all organizations (uuid.Nil for cross-org access)
+	executions, err := w.executionRepo.GetPausedExecutions(ctx, uuid.Nil, limit)
 	if err != nil {
 		w.logger.Errorf("Failed to get paused executions: %v", err)
 		return nil, fmt.Errorf("failed to get paused executions: %w", err)

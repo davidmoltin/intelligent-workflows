@@ -11,13 +11,13 @@ import (
 
 // ScheduleService defines the interface for schedule operations
 type ScheduleService interface {
-	GetDueSchedules(ctx context.Context) ([]*models.WorkflowSchedule, error)
-	MarkTriggered(ctx context.Context, id uuid.UUID) error
+	GetDueSchedules(ctx context.Context, organizationID uuid.UUID) ([]*models.WorkflowSchedule, error)
+	MarkTriggered(ctx context.Context, organizationID, id uuid.UUID) error
 }
 
 // WorkflowTrigger defines the interface for triggering workflows
 type WorkflowTrigger interface {
-	TriggerWorkflowManually(ctx context.Context, workflowID uuid.UUID, payload map[string]interface{}) (*models.WorkflowExecution, error)
+	TriggerWorkflowManually(ctx context.Context, organizationID, workflowID uuid.UUID, payload map[string]interface{}) (*models.WorkflowExecution, error)
 }
 
 // SchedulerWorker handles periodic checking and triggering of scheduled workflows
@@ -94,8 +94,8 @@ func (w *SchedulerWorker) run(ctx context.Context) {
 func (w *SchedulerWorker) processDueSchedules(ctx context.Context) {
 	w.logger.Debug("Checking for due schedules")
 
-	// Get due schedules
-	schedules, err := w.scheduleService.GetDueSchedules(ctx)
+	// Get due schedules across all organizations (worker context)
+	schedules, err := w.scheduleService.GetDueSchedules(ctx, uuid.Nil)
 	if err != nil {
 		w.logger.Errorf("Failed to get due schedules: %v", err)
 		return
@@ -121,14 +121,15 @@ func (w *SchedulerWorker) processDueSchedules(ctx context.Context) {
 		}
 
 		w.logger.Infof(
-			"Triggering scheduled workflow: workflow_id=%s, schedule_id=%s, cron=%s",
+			"Triggering scheduled workflow: org_id=%s, workflow_id=%s, schedule_id=%s, cron=%s",
+			schedule.OrganizationID,
 			schedule.WorkflowID,
 			schedule.ID,
 			schedule.CronExpression,
 		)
 
-		// Trigger the workflow
-		execution, err := w.workflowTrigger.TriggerWorkflowManually(ctx, schedule.WorkflowID, payload)
+		// Trigger the workflow with organization context
+		execution, err := w.workflowTrigger.TriggerWorkflowManually(ctx, schedule.OrganizationID, schedule.WorkflowID, payload)
 		if err != nil {
 			w.logger.Errorf(
 				"Failed to trigger scheduled workflow %s (schedule %s): %v",
@@ -147,7 +148,7 @@ func (w *SchedulerWorker) processDueSchedules(ctx context.Context) {
 		)
 
 		// Mark schedule as triggered (this also calculates next run time)
-		if err := w.scheduleService.MarkTriggered(ctx, schedule.ID); err != nil {
+		if err := w.scheduleService.MarkTriggered(ctx, schedule.OrganizationID, schedule.ID); err != nil {
 			w.logger.Errorf(
 				"Failed to mark schedule %s as triggered: %v",
 				schedule.ID,

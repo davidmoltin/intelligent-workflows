@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/google/uuid"
@@ -23,15 +24,15 @@ func NewApprovalRepository(db *sql.DB) *ApprovalRepository {
 func (r *ApprovalRepository) CreateApproval(ctx context.Context, approval *models.ApprovalRequest) error {
 	query := `
 		INSERT INTO approval_requests (
-			id, request_id, execution_id, entity_type, entity_id,
+			id, organization_id, request_id, execution_id, entity_type, entity_id,
 			requester_id, approver_role, approver_id, status, reason,
 			decision_reason, requested_at, decided_at, expires_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, requested_at`
 
 	err := r.db.QueryRowContext(
 		ctx, query,
-		approval.ID, approval.RequestID, approval.ExecutionID,
+		approval.ID, approval.OrganizationID, approval.RequestID, approval.ExecutionID,
 		approval.EntityType, approval.EntityID, approval.RequesterID,
 		approval.ApproverRole, approval.ApproverID, approval.Status,
 		approval.Reason, approval.DecisionReason, approval.RequestedAt,
@@ -46,18 +47,18 @@ func (r *ApprovalRepository) CreateApproval(ctx context.Context, approval *model
 }
 
 // UpdateApproval updates an approval request
-func (r *ApprovalRepository) UpdateApproval(ctx context.Context, approval *models.ApprovalRequest) error {
+func (r *ApprovalRepository) UpdateApproval(ctx context.Context, organizationID uuid.UUID, approval *models.ApprovalRequest) error {
 	query := `
 		UPDATE approval_requests
-		SET status = $2,
-		    approver_id = $3,
-		    decision_reason = $4,
-		    decided_at = $5
-		WHERE id = $1`
+		SET status = $3,
+		    approver_id = $4,
+		    decision_reason = $5,
+		    decided_at = $6
+		WHERE organization_id = $1 AND id = $2`
 
 	result, err := r.db.ExecContext(
 		ctx, query,
-		approval.ID, approval.Status, approval.ApproverID,
+		organizationID, approval.ID, approval.Status, approval.ApproverID,
 		approval.DecisionReason, approval.DecidedAt,
 	)
 
@@ -77,18 +78,56 @@ func (r *ApprovalRepository) UpdateApproval(ctx context.Context, approval *model
 	return nil
 }
 
-// GetApprovalByID retrieves an approval by ID
-func (r *ApprovalRepository) GetApprovalByID(ctx context.Context, id uuid.UUID) (*models.ApprovalRequest, error) {
+// UpdateApprovalStatus updates just the status-related fields of an approval
+func (r *ApprovalRepository) UpdateApprovalStatus(
+	ctx context.Context,
+	organizationID, id uuid.UUID,
+	status models.ApprovalStatus,
+	approverID *uuid.UUID,
+	decision *string,
+	decidedAt *time.Time,
+) error {
+	query := `
+		UPDATE approval_requests
+		SET status = $3,
+		    approver_id = $4,
+		    decision_reason = $5,
+		    decided_at = $6
+		WHERE organization_id = $1 AND id = $2`
+
+	result, err := r.db.ExecContext(
+		ctx, query,
+		organizationID, id, status, approverID, decision, decidedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update approval status: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("approval not found")
+	}
+
+	return nil
+}
+
+// GetApprovalByID retrieves an approval by ID within an organization
+func (r *ApprovalRepository) GetApprovalByID(ctx context.Context, organizationID, id uuid.UUID) (*models.ApprovalRequest, error) {
 	approval := &models.ApprovalRequest{}
 	query := `
-		SELECT id, request_id, execution_id, entity_type, entity_id,
+		SELECT id, organization_id, request_id, execution_id, entity_type, entity_id,
 		       requester_id, approver_role, approver_id, status, reason,
 		       decision_reason, requested_at, decided_at, expires_at
 		FROM approval_requests
-		WHERE id = $1`
+		WHERE organization_id = $1 AND id = $2`
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&approval.ID, &approval.RequestID, &approval.ExecutionID,
+	err := r.db.QueryRowContext(ctx, query, organizationID, id).Scan(
+		&approval.ID, &approval.OrganizationID, &approval.RequestID, &approval.ExecutionID,
 		&approval.EntityType, &approval.EntityID, &approval.RequesterID,
 		&approval.ApproverRole, &approval.ApproverID, &approval.Status,
 		&approval.Reason, &approval.DecisionReason, &approval.RequestedAt,
@@ -105,18 +144,18 @@ func (r *ApprovalRepository) GetApprovalByID(ctx context.Context, id uuid.UUID) 
 	return approval, nil
 }
 
-// GetApprovalByRequestID retrieves an approval by request_id string
-func (r *ApprovalRepository) GetApprovalByRequestID(ctx context.Context, requestID string) (*models.ApprovalRequest, error) {
+// GetApprovalByRequestID retrieves an approval by request_id string within an organization
+func (r *ApprovalRepository) GetApprovalByRequestID(ctx context.Context, organizationID uuid.UUID, requestID string) (*models.ApprovalRequest, error) {
 	approval := &models.ApprovalRequest{}
 	query := `
-		SELECT id, request_id, execution_id, entity_type, entity_id,
+		SELECT id, organization_id, request_id, execution_id, entity_type, entity_id,
 		       requester_id, approver_role, approver_id, status, reason,
 		       decision_reason, requested_at, decided_at, expires_at
 		FROM approval_requests
-		WHERE request_id = $1`
+		WHERE organization_id = $1 AND request_id = $2`
 
-	err := r.db.QueryRowContext(ctx, query, requestID).Scan(
-		&approval.ID, &approval.RequestID, &approval.ExecutionID,
+	err := r.db.QueryRowContext(ctx, query, organizationID, requestID).Scan(
+		&approval.ID, &approval.OrganizationID, &approval.RequestID, &approval.ExecutionID,
 		&approval.EntityType, &approval.EntityID, &approval.RequesterID,
 		&approval.ApproverRole, &approval.ApproverID, &approval.Status,
 		&approval.Reason, &approval.DecisionReason, &approval.RequestedAt,
@@ -133,9 +172,10 @@ func (r *ApprovalRepository) GetApprovalByRequestID(ctx context.Context, request
 	return approval, nil
 }
 
-// ListApprovals retrieves approvals with pagination and filters
+// ListApprovals retrieves approvals with pagination and filters within an organization
 func (r *ApprovalRepository) ListApprovals(
 	ctx context.Context,
+	organizationID uuid.UUID,
 	status *models.ApprovalStatus,
 	approverID *uuid.UUID,
 	limit, offset int,
@@ -144,27 +184,29 @@ func (r *ApprovalRepository) ListApprovals(
 	countQuery := `
 		SELECT COUNT(*)
 		FROM approval_requests
-		WHERE ($1::varchar IS NULL OR status = $1)
-		  AND ($2::uuid IS NULL OR approver_id = $2)`
+		WHERE organization_id = $1
+		  AND ($2::varchar IS NULL OR status = $2)
+		  AND ($3::uuid IS NULL OR approver_id = $3)`
 
 	var total int64
-	err := r.db.QueryRowContext(ctx, countQuery, status, approverID).Scan(&total)
+	err := r.db.QueryRowContext(ctx, countQuery, organizationID, status, approverID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count approvals: %w", err)
 	}
 
 	// Get approvals
 	query := `
-		SELECT id, request_id, execution_id, entity_type, entity_id,
+		SELECT id, organization_id, request_id, execution_id, entity_type, entity_id,
 		       requester_id, approver_role, approver_id, status, reason,
 		       decision_reason, requested_at, decided_at, expires_at
 		FROM approval_requests
-		WHERE ($1::varchar IS NULL OR status = $1)
-		  AND ($2::uuid IS NULL OR approver_id = $2)
+		WHERE organization_id = $1
+		  AND ($2::varchar IS NULL OR status = $2)
+		  AND ($3::uuid IS NULL OR approver_id = $3)
 		ORDER BY requested_at DESC
-		LIMIT $3 OFFSET $4`
+		LIMIT $4 OFFSET $5`
 
-	rows, err := r.db.QueryContext(ctx, query, status, approverID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, status, approverID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list approvals: %w", err)
 	}
@@ -174,7 +216,7 @@ func (r *ApprovalRepository) ListApprovals(
 	for rows.Next() {
 		approval := models.ApprovalRequest{}
 		err := rows.Scan(
-			&approval.ID, &approval.RequestID, &approval.ExecutionID,
+			&approval.ID, &approval.OrganizationID, &approval.RequestID, &approval.ExecutionID,
 			&approval.EntityType, &approval.EntityID, &approval.RequesterID,
 			&approval.ApproverRole, &approval.ApproverID, &approval.Status,
 			&approval.Reason, &approval.DecisionReason, &approval.RequestedAt,
@@ -189,17 +231,17 @@ func (r *ApprovalRepository) ListApprovals(
 	return approvals, total, nil
 }
 
-// GetApprovalsByExecution retrieves all approvals for an execution
-func (r *ApprovalRepository) GetApprovalsByExecution(ctx context.Context, executionID uuid.UUID) ([]models.ApprovalRequest, error) {
+// GetApprovalsByExecution retrieves all approvals for an execution within an organization
+func (r *ApprovalRepository) GetApprovalsByExecution(ctx context.Context, organizationID, executionID uuid.UUID) ([]models.ApprovalRequest, error) {
 	query := `
-		SELECT id, request_id, execution_id, entity_type, entity_id,
+		SELECT id, organization_id, request_id, execution_id, entity_type, entity_id,
 		       requester_id, approver_role, approver_id, status, reason,
 		       decision_reason, requested_at, decided_at, expires_at
 		FROM approval_requests
-		WHERE execution_id = $1
+		WHERE organization_id = $1 AND execution_id = $2
 		ORDER BY requested_at DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, executionID)
+	rows, err := r.db.QueryContext(ctx, query, organizationID, executionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approvals: %w", err)
 	}
@@ -209,7 +251,46 @@ func (r *ApprovalRepository) GetApprovalsByExecution(ctx context.Context, execut
 	for rows.Next() {
 		approval := models.ApprovalRequest{}
 		err := rows.Scan(
-			&approval.ID, &approval.RequestID, &approval.ExecutionID,
+			&approval.ID, &approval.OrganizationID, &approval.RequestID, &approval.ExecutionID,
+			&approval.EntityType, &approval.EntityID, &approval.RequesterID,
+			&approval.ApproverRole, &approval.ApproverID, &approval.Status,
+			&approval.Reason, &approval.DecisionReason, &approval.RequestedAt,
+			&approval.DecidedAt, &approval.ExpiresAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan approval: %w", err)
+		}
+		approvals = append(approvals, approval)
+	}
+
+	return approvals, nil
+}
+
+// GetExpiredApprovals retrieves approval requests that have expired within an organization
+func (r *ApprovalRepository) GetExpiredApprovals(ctx context.Context, organizationID uuid.UUID, limit int) ([]models.ApprovalRequest, error) {
+	query := `
+		SELECT id, organization_id, request_id, execution_id, entity_type, entity_id,
+		       requester_id, approver_role, approver_id, status, reason,
+		       decision_reason, requested_at, decided_at, expires_at
+		FROM approval_requests
+		WHERE organization_id = $1
+		  AND status = $2
+		  AND expires_at IS NOT NULL
+		  AND expires_at < NOW()
+		ORDER BY expires_at ASC
+		LIMIT $3`
+
+	rows, err := r.db.QueryContext(ctx, query, organizationID, models.ApprovalStatusPending, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expired approvals: %w", err)
+	}
+	defer rows.Close()
+
+	var approvals []models.ApprovalRequest
+	for rows.Next() {
+		approval := models.ApprovalRequest{}
+		err := rows.Scan(
+			&approval.ID, &approval.OrganizationID, &approval.RequestID, &approval.ExecutionID,
 			&approval.EntityType, &approval.EntityID, &approval.RequesterID,
 			&approval.ApproverRole, &approval.ApproverID, &approval.Status,
 			&approval.Reason, &approval.DecisionReason, &approval.RequestedAt,

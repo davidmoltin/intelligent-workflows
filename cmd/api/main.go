@@ -14,6 +14,7 @@ import (
 	"github.com/davidmoltin/intelligent-workflows/internal/engine"
 	"github.com/davidmoltin/intelligent-workflows/internal/repository/postgres"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
+	"github.com/davidmoltin/intelligent-workflows/internal/websocket"
 	"github.com/davidmoltin/intelligent-workflows/internal/workers"
 	"github.com/davidmoltin/intelligent-workflows/pkg/auth"
 	"github.com/davidmoltin/intelligent-workflows/pkg/config"
@@ -77,20 +78,29 @@ func run() error {
 	analyticsRepo := postgres.NewAnalyticsRepository(db.DB)
 	eventRepo := postgres.NewEventRepository(db.DB)
 	approvalRepo := postgres.NewApprovalRepository(db.DB)
+	organizationRepo := postgres.NewOrganizationRepository(db.DB)
 	userRepo := postgres.NewUserRepository(db.DB)
 	apiKeyRepo := postgres.NewAPIKeyRepository(db.DB)
 	refreshTokenRepo := postgres.NewRefreshTokenRepository(db.DB)
 	scheduleRepo := postgres.NewScheduleRepository(db.DB)
+	auditRepo := postgres.NewAuditRepository(db.DB)
 	ruleRepo := postgres.NewRuleRepository(db.DB)
+
+	// Initialize WebSocket hub
+	wsHub := websocket.NewHub(redis.Client, log.Logger)
+	if err := wsHub.Start(); err != nil {
+		return fmt.Errorf("failed to start WebSocket hub: %w", err)
+	}
+	defer wsHub.Stop()
+	log.Info("WebSocket hub initialized")
 
 	// Initialize workflow engine components
 	evaluator := engine.NewEvaluator()
-	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, log, metricsRegistry)
+	executor := engine.NewWorkflowExecutor(redis.Client, executionRepo, workflowRepo, wsHub, log, metricsRegistry, &cfg.ContextEnrichment)
 
 	// Initialize rule service and connect to executor
 	ruleService := services.NewRuleService(ruleRepo, evaluator, redis, log)
 	executor.SetRuleService(ruleService)
-
 	eventRouter := engine.NewEventRouter(workflowRepo, eventRepo, executor, log)
 
 	// Initialize notification service
@@ -99,8 +109,11 @@ func run() error {
 		return fmt.Errorf("failed to initialize notification service: %w", err)
 	}
 
+	// Initialize audit service
+	auditService := services.NewAuditService(auditRepo, log)
+
 	// Initialize workflow resumer
-	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor)
+	workflowResumer := services.NewWorkflowResumer(log, executionRepo, executor, auditService)
 
 	// Initialize JWT manager
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -159,8 +172,8 @@ func run() error {
 	}
 
 	// Initialize services
-	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, cfg.App.DefaultApproverEmail)
-	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, jwtManager, log)
+	approvalService := services.NewApprovalService(approvalRepo, log, notificationService, workflowResumer, auditService, cfg.App.DefaultApproverEmail)
+	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, organizationRepo, jwtManager, log)
 	scheduleService := services.NewScheduleService(scheduleRepo, log)
 
 	// Initialize and start approval expiration worker
@@ -187,12 +200,15 @@ func run() error {
 		workflowRepo,
 		executionRepo,
 		analyticsRepo,
+		organizationRepo,
 		eventRouter,
 		approvalService,
 		authService,
 		scheduleService,
 		workflowResumer,
 		aiService,
+		wsHub,
+		auditService,
 		ruleService,
 		&handlers.HealthCheckers{
 			DB:    db,

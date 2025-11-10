@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/davidmoltin/intelligent-workflows/internal/api/rest/middleware"
 	"github.com/davidmoltin/intelligent-workflows/internal/models"
 	"github.com/davidmoltin/intelligent-workflows/internal/services"
 	"github.com/davidmoltin/intelligent-workflows/pkg/logger"
@@ -28,6 +29,13 @@ func NewApprovalHandler(log *logger.Logger, approvalService *services.ApprovalSe
 
 // ListApprovals handles GET /api/v1/approvals
 func (h *ApprovalHandler) ListApprovals(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse query parameters
 	statusStr := r.URL.Query().Get("status")
 	approverIDStr := r.URL.Query().Get("approver_id")
@@ -68,7 +76,7 @@ func (h *ApprovalHandler) ListApprovals(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get approvals
-	approvals, total, err := h.approvalService.ListApprovals(r.Context(), status, approverID, limit, offset)
+	approvals, total, err := h.approvalService.ListApprovals(r.Context(), organizationID, status, approverID, limit, offset)
 	if err != nil {
 		h.logger.Errorf("Failed to list approvals: %v", err)
 		http.Error(w, "Failed to retrieve approvals", http.StatusInternalServerError)
@@ -88,6 +96,13 @@ func (h *ApprovalHandler) ListApprovals(w http.ResponseWriter, r *http.Request) 
 
 // GetApproval handles GET /api/v1/approvals/:id
 func (h *ApprovalHandler) GetApproval(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		http.Error(w, "Organization context required", http.StatusUnauthorized)
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -96,7 +111,7 @@ func (h *ApprovalHandler) GetApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	approval, err := h.approvalService.GetApproval(r.Context(), id)
+	approval, err := h.approvalService.GetApproval(r.Context(), organizationID, id)
 	if err != nil {
 		h.logger.Errorf("Failed to get approval: %v", err)
 		http.Error(w, "Approval not found", http.StatusNotFound)
@@ -109,6 +124,13 @@ func (h *ApprovalHandler) GetApproval(w http.ResponseWriter, r *http.Request) {
 
 // ApproveRequest handles POST /api/v1/approvals/:id/approve
 func (h *ApprovalHandler) ApproveRequest(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -125,14 +147,14 @@ func (h *ApprovalHandler) ApproveRequest(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get approver ID from authentication context
-	userID, ok := r.Context().Value("user_id").(uuid.UUID)
-	if !ok {
+	userID := middleware.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.logger.Error("User ID not found in context")
 		RespondError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
-	approval, err := h.approvalService.ApproveRequest(r.Context(), id, userID, req.Reason)
+	approval, err := h.approvalService.ApproveRequest(r.Context(), organizationID, id, userID, req.Reason)
 	if err != nil {
 		h.logger.Errorf("Failed to approve request: %v", err)
 		// Don't leak internal error details
@@ -146,6 +168,13 @@ func (h *ApprovalHandler) ApproveRequest(w http.ResponseWriter, r *http.Request)
 
 // RejectRequest handles POST /api/v1/approvals/:id/reject
 func (h *ApprovalHandler) RejectRequest(w http.ResponseWriter, r *http.Request) {
+	// Get organization ID from context
+	organizationID := middleware.GetOrganizationID(r.Context())
+	if organizationID == uuid.Nil {
+		RespondError(w, http.StatusUnauthorized, "Organization context required")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 
 	id, err := uuid.Parse(idStr)
@@ -162,14 +191,14 @@ func (h *ApprovalHandler) RejectRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get approver ID from authentication context
-	userID, ok := r.Context().Value("user_id").(uuid.UUID)
-	if !ok {
+	userID := middleware.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.logger.Error("User ID not found in context")
 		RespondError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
-	approval, err := h.approvalService.RejectRequest(r.Context(), id, userID, req.Reason)
+	approval, err := h.approvalService.RejectRequest(r.Context(), organizationID, id, userID, req.Reason)
 	if err != nil {
 		h.logger.Errorf("Failed to reject request: %v", err)
 		// Don't leak internal error details

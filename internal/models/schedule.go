@@ -9,6 +9,7 @@ import (
 // WorkflowSchedule represents a cron-based schedule for a workflow
 type WorkflowSchedule struct {
 	ID              uuid.UUID  `json:"id" db:"id"`
+	OrganizationID  uuid.UUID  `json:"organization_id" db:"organization_id"`
 	WorkflowID      uuid.UUID  `json:"workflow_id" db:"workflow_id"`
 	CronExpression  string     `json:"cron_expression" db:"cron_expression"`
 	Timezone        string     `json:"timezone" db:"timezone"`

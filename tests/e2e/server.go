@@ -46,7 +46,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	log := logger.NewForTesting()
 
 	// Create router with handlers
-	router := rest.NewRouter(log, h, nil)
+	router := rest.NewRouter(log, h, nil, nil)
 	router.SetupRoutes()
 
 	// Find available port
