@@ -48,18 +48,20 @@ type ContextDefinition struct {
 // Step represents a workflow step
 type Step struct {
 	ID        string                 `json:"id"`
-	Type      string                 `json:"type"` // condition, action, parallel, execute, wait
+	Type      string                 `json:"type"` // condition, action, parallel, foreach, execute, wait
 	RuleID    string                 `json:"rule_id,omitempty"`    // Reference to a named rule (for condition steps)
 	Condition *Condition             `json:"condition,omitempty"`
 	Action    *Action                `json:"action,omitempty"`
 	OnTrue    string                 `json:"on_true,omitempty"`
 	OnFalse   string                 `json:"on_false,omitempty"`
 	Parallel  *ParallelStep          `json:"parallel,omitempty"`
+	ForEach   *ForEachStep           `json:"foreach,omitempty"`
 	Execute   []ExecuteAction        `json:"execute,omitempty"`
 	Wait      *WaitConfig            `json:"wait,omitempty"`
 	Retry     *RetryConfig           `json:"retry,omitempty"`
 	Timeout   string                 `json:"timeout,omitempty"` // Step-level timeout, e.g., "30s", "2m"
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Next      string                 `json:"next,omitempty"` // Next step ID for sequential flow
 }
 
 // Condition represents a conditional expression
@@ -82,6 +84,13 @@ type Action struct {
 type ParallelStep struct {
 	Steps    []Step `json:"steps"`
 	Strategy string `json:"strategy"` // all_must_pass, any_can_pass, best_effort
+}
+
+// ForEachStep represents iteration over a collection
+type ForEachStep struct {
+	Items   string `json:"items"`    // JSONPath or variable reference to collection, e.g., "{{items}}", "{{order.line_items}}"
+	ItemVar string `json:"item_var"` // Variable name for current item in loop, e.g., "item", "line_item"
+	Steps   []Step `json:"steps"`    // Steps to execute for each item
 }
 
 // ExecuteAction represents an action to execute

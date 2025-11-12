@@ -74,6 +74,11 @@ func (we *WorkflowExecutor) SetRuleService(ruleService RuleService) {
 	we.ruleService = ruleService
 }
 
+// SetApprovalService sets the approval service for the action executor (optional dependency)
+func (we *WorkflowExecutor) SetApprovalService(approvalService ApprovalService) {
+	we.actionExecutor.SetApprovalService(approvalService)
+}
+
 // Execute executes a workflow
 func (we *WorkflowExecutor) Execute(
 	ctx context.Context,
@@ -131,6 +136,9 @@ func (we *WorkflowExecutor) Execute(
 	if err := we.executionRepo.CreateExecution(ctx, execution); err != nil {
 		return nil, fmt.Errorf("failed to create execution: %w", err)
 	}
+
+	// Set execution context for action executor (needed for approval requests)
+	we.actionExecutor.SetExecutionContext(execution.ID)
 
 	// Broadcast execution started event
 	we.broadcastExecutionEvent(execution)
@@ -370,7 +378,11 @@ func (we *WorkflowExecutor) executeStep(
 
 	case "parallel":
 		err = we.executeParallelStep(ctx, execution, step, execContext)
-		nextStepID = "" // Parallel steps end the flow for now
+		nextStepID = step.Next // Support next step after parallel
+
+	case "foreach":
+		err = we.executeForEachStep(ctx, execution, step, execContext)
+		nextStepID = step.Next // Support next step after foreach
 
 	case "wait":
 		err = we.executeWaitStep(ctx, execution, step, execContext)
@@ -564,6 +576,88 @@ func (we *WorkflowExecutor) executeParallelStep(
 	default:
 		return fmt.Errorf("unknown parallel strategy: %s", strategy)
 	}
+}
+
+// executeForEachStep executes steps for each item in a collection
+func (we *WorkflowExecutor) executeForEachStep(
+	ctx context.Context,
+	execution *models.WorkflowExecution,
+	step *models.Step,
+	execContext map[string]interface{},
+) error {
+	if step.ForEach == nil || len(step.ForEach.Steps) == 0 {
+		return fmt.Errorf("foreach step has no steps defined")
+	}
+
+	if step.ForEach.Items == "" {
+		return fmt.Errorf("foreach step has no items specified")
+	}
+
+	if step.ForEach.ItemVar == "" {
+		return fmt.Errorf("foreach step has no item_var specified")
+	}
+
+	// Resolve the items collection from context
+	items, err := we.resolveItemsCollection(step.ForEach.Items, execContext)
+	if err != nil {
+		return fmt.Errorf("failed to resolve items collection: %w", err)
+	}
+
+	we.logger.Infof("Executing foreach loop over %d items", len(items))
+
+	// Execute steps for each item
+	for i, item := range items {
+		// Create a new context with the item variable
+		itemContext := make(map[string]interface{})
+		for k, v := range execContext {
+			itemContext[k] = v
+		}
+		itemContext[step.ForEach.ItemVar] = item
+		itemContext["_index"] = i
+
+		we.logger.Infof("Executing foreach iteration %d/%d", i+1, len(items))
+
+		// Execute all steps for this item
+		for _, foreachStep := range step.ForEach.Steps {
+			_, _, err := we.executeStep(ctx, execution, &foreachStep, itemContext)
+			if err != nil {
+				return fmt.Errorf("foreach iteration %d, step %s failed: %w", i, foreachStep.ID, err)
+			}
+		}
+	}
+
+	we.logger.Infof("Foreach loop completed: processed %d items", len(items))
+	return nil
+}
+
+// resolveItemsCollection resolves a collection from a variable reference or JSONPath
+func (we *WorkflowExecutor) resolveItemsCollection(items string, execContext map[string]interface{}) ([]interface{}, error) {
+	// Handle variable references like {{items}} or {{order.line_items}}
+	if len(items) > 4 && items[:2] == "{{" && items[len(items)-2:] == "}}" {
+		varPath := items[2 : len(items)-2]
+		value := we.evaluator.ResolveVariable(varPath, execContext)
+
+		if value == nil {
+			return nil, fmt.Errorf("variable %s not found in context", varPath)
+		}
+
+		// Convert value to array
+		switch v := value.(type) {
+		case []interface{}:
+			return v, nil
+		case []map[string]interface{}:
+			result := make([]interface{}, len(v))
+			for i, item := range v {
+				result[i] = item
+			}
+			return result, nil
+		default:
+			return nil, fmt.Errorf("variable %s is not a collection (type: %T)", varPath, value)
+		}
+	}
+
+	// If not a variable reference, try to interpret as literal JSON array
+	return nil, fmt.Errorf("items must be a variable reference like {{variable}}")
 }
 
 // ErrExecutionPaused is returned when a workflow execution is paused (waiting)

@@ -34,18 +34,23 @@ export interface ContextConfig {
 
 export interface Step {
   id: string
-  type: 'condition' | 'action' | 'execute' | 'parallel' | 'foreach'
+  type: 'condition' | 'action' | 'execute' | 'parallel' | 'foreach' | 'wait'
   name?: string
   condition?: Condition
   action?: Action
   execute?: ExecuteAction[]
+  parallel?: ParallelStep
+  foreach?: ForEachStep
+  wait?: WaitConfig
   on_true?: string
   on_false?: string
   next?: string
+  timeout?: string
   metadata?: Record<string, any>
+  retry?: RetryConfig
+  // Legacy fields for backwards compatibility
   steps?: Step[]
   strategy?: string
-  retry?: RetryConfig
 }
 
 export interface Condition {
@@ -58,13 +63,41 @@ export interface Condition {
 }
 
 export interface Action {
-  action: 'allow' | 'block' | 'execute'
+  type: 'allow' | 'block' | 'execute' | 'wait' | 'require_approval'
   reason?: string
 }
 
 export interface ExecuteAction {
-  type: 'notify' | 'webhook' | 'create_record' | 'update_record'
-  config?: Record<string, any>
+  type: 'notify' | 'webhook' | 'http_request' | 'create_record' | 'update_record' | 'create_approval_request' | 'log'
+  // Notify action fields
+  recipients?: string[]
+  message?: string
+  // Webhook/HTTP request fields
+  url?: string
+  method?: string
+  headers?: Record<string, string>
+  body?: Record<string, any>
+  // Record action fields
+  entity?: string
+  entity_id?: string
+  data?: Record<string, any>
+}
+
+export interface ParallelStep {
+  steps: Step[]
+  strategy: 'all_must_pass' | 'any_can_pass' | 'best_effort'
+}
+
+export interface ForEachStep {
+  items: string
+  item_var: string
+  steps: Step[]
+}
+
+export interface WaitConfig {
+  event: string
+  timeout: string
+  on_timeout?: string
 }
 
 export interface RetryConfig {

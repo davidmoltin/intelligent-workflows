@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Trash2 } from 'lucide-react'
 
 interface StepEditorProps {
   step: Step | null
@@ -37,14 +38,74 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
   const [onFalse, setOnFalse] = useState(step?.on_false || '')
 
   // Action fields
-  const [actionType, setActionType] = useState<Action['action']>(
-    step?.action?.action || 'allow'
+  const [actionType, setActionType] = useState<Action['type']>(
+    step?.action?.type || 'allow'
   )
   const [actionReason, setActionReason] = useState(step?.action?.reason || '')
 
   // Execute fields
   const [executeType, setExecuteType] = useState<ExecuteAction['type']>('notify')
-  const [executeConfig, setExecuteConfig] = useState('')
+  // Notify fields
+  const [recipients, setRecipients] = useState<string>('')
+  const [message, setMessage] = useState('')
+  // Webhook fields
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookMethod, setWebhookMethod] = useState('POST')
+  const [webhookHeaders, setWebhookHeaders] = useState('')
+  const [webhookBody, setWebhookBody] = useState('')
+  // Record fields
+  const [recordEntity, setRecordEntity] = useState('')
+  const [recordEntityId, setRecordEntityId] = useState('')
+  const [recordData, setRecordData] = useState('')
+
+  // Parallel fields
+  const [parallelStrategy, setParallelStrategy] = useState<'all_must_pass' | 'any_can_pass' | 'best_effort'>(
+    step?.parallel?.strategy || 'all_must_pass'
+  )
+  const [parallelSteps, setParallelSteps] = useState<Step[]>(step?.parallel?.steps || [])
+
+  const handleAddParallelStep = () => {
+    const newStep: Step = {
+      id: `step_${Date.now()}`,
+      type: 'condition',
+      name: 'New Step',
+    }
+    setParallelSteps([...parallelSteps, newStep])
+  }
+
+  const handleRemoveParallelStep = (index: number) => {
+    setParallelSteps(parallelSteps.filter((_, i) => i !== index))
+  }
+
+  const handleUpdateParallelStep = (index: number, updatedStep: Partial<Step>) => {
+    const updated = [...parallelSteps]
+    updated[index] = { ...updated[index], ...updatedStep }
+    setParallelSteps(updated)
+  }
+
+  // ForEach fields
+  const [foreachItems, setForeachItems] = useState(step?.foreach?.items || '')
+  const [foreachItemVar, setForeachItemVar] = useState(step?.foreach?.item_var || '')
+  const [foreachSteps, setForeachSteps] = useState<Step[]>(step?.foreach?.steps || [])
+
+  const handleAddForeachStep = () => {
+    const newStep: Step = {
+      id: `step_${Date.now()}`,
+      type: 'condition',
+      name: 'New Step',
+    }
+    setForeachSteps([...foreachSteps, newStep])
+  }
+
+  const handleRemoveForeachStep = (index: number) => {
+    setForeachSteps(foreachSteps.filter((_, i) => i !== index))
+  }
+
+  const handleUpdateForeachStep = (index: number, updatedStep: Partial<Step>) => {
+    const updated = [...foreachSteps]
+    updated[index] = { ...updated[index], ...updatedStep }
+    setForeachSteps(updated)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,16 +127,47 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
       newStep.on_false = onFalse || undefined
     } else if (stepType === 'action') {
       newStep.action = {
-        action: actionType,
+        type: actionType,
         reason: actionReason || undefined,
       }
     } else if (stepType === 'execute') {
-      newStep.execute = [
-        {
-          type: executeType,
-          config: executeConfig ? JSON.parse(executeConfig) : undefined,
-        },
-      ]
+      const executeAction: ExecuteAction = {
+        type: executeType,
+      }
+
+      // Add type-specific fields
+      if (executeType === 'notify') {
+        executeAction.recipients = recipients ? recipients.split(',').map(r => r.trim()) : []
+        executeAction.message = message
+      } else if (executeType === 'webhook' || executeType === 'http_request') {
+        executeAction.url = webhookUrl
+        executeAction.method = webhookMethod
+        if (webhookHeaders) {
+          executeAction.headers = JSON.parse(webhookHeaders)
+        }
+        if (webhookBody) {
+          executeAction.body = JSON.parse(webhookBody)
+        }
+      } else if (executeType === 'create_record' || executeType === 'update_record' || executeType === 'create_approval_request') {
+        executeAction.entity = recordEntity
+        executeAction.entity_id = recordEntityId
+        if (recordData) {
+          executeAction.data = JSON.parse(recordData)
+        }
+      }
+
+      newStep.execute = [executeAction]
+    } else if (stepType === 'parallel') {
+      newStep.parallel = {
+        steps: parallelSteps,
+        strategy: parallelStrategy,
+      }
+    } else if (stepType === 'foreach') {
+      newStep.foreach = {
+        items: foreachItems,
+        item_var: foreachItemVar,
+        steps: foreachSteps,
+      }
     }
 
     onSave(newStep)
@@ -212,6 +304,8 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
                     <SelectItem value="allow">Allow</SelectItem>
                     <SelectItem value="block">Block</SelectItem>
                     <SelectItem value="execute">Execute</SelectItem>
+                    <SelectItem value="wait">Wait</SelectItem>
+                    <SelectItem value="require_approval">Require Approval</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -243,32 +337,378 @@ export function StepEditor({ step, onSave, onCancel }: StepEditorProps) {
                   <SelectContent>
                     <SelectItem value="notify">Notify</SelectItem>
                     <SelectItem value="webhook">Webhook</SelectItem>
+                    <SelectItem value="http_request">HTTP Request</SelectItem>
                     <SelectItem value="create_record">Create Record</SelectItem>
                     <SelectItem value="update_record">Update Record</SelectItem>
+                    <SelectItem value="create_approval_request">Create Approval Request</SelectItem>
+                    <SelectItem value="log">Log</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Notify fields */}
+              {executeType === 'notify' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="recipients">Recipients (comma-separated)</Label>
+                    <Input
+                      id="recipients"
+                      placeholder="e.g., user@example.com, role:manager"
+                      value={recipients}
+                      onChange={(e) => setRecipients(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Message</Label>
+                    <Textarea
+                      id="message"
+                      placeholder="Enter notification message..."
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Webhook/HTTP Request fields */}
+              {(executeType === 'webhook' || executeType === 'http_request') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-url">URL</Label>
+                    <Input
+                      id="webhook-url"
+                      placeholder="https://api.example.com/webhook"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-method">HTTP Method</Label>
+                    <Select
+                      value={webhookMethod}
+                      onValueChange={setWebhookMethod}
+                    >
+                      <SelectTrigger id="webhook-method">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                        <SelectItem value="PUT">PUT</SelectItem>
+                        <SelectItem value="PATCH">PATCH</SelectItem>
+                        <SelectItem value="DELETE">DELETE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-headers">Headers (JSON, optional)</Label>
+                    <Textarea
+                      id="webhook-headers"
+                      placeholder='{"Authorization": "Bearer token"}'
+                      value={webhookHeaders}
+                      onChange={(e) => setWebhookHeaders(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-body">Body (JSON, optional)</Label>
+                    <Textarea
+                      id="webhook-body"
+                      placeholder='{"key": "value"}'
+                      value={webhookBody}
+                      onChange={(e) => setWebhookBody(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Record fields */}
+              {(executeType === 'create_record' || executeType === 'update_record' || executeType === 'create_approval_request') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-entity">Entity Type</Label>
+                    <Input
+                      id="record-entity"
+                      placeholder="e.g., order, customer, approval"
+                      value={recordEntity}
+                      onChange={(e) => setRecordEntity(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-entity-id">Entity ID (optional, use {{}} for variables)</Label>
+                    <Input
+                      id="record-entity-id"
+                      placeholder="e.g., {{order.id}}"
+                      value={recordEntityId}
+                      onChange={(e) => setRecordEntityId(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="record-data">Data (JSON)</Label>
+                    <Textarea
+                      id="record-data"
+                      placeholder='{"field": "value", "status": "pending"}'
+                      value={recordData}
+                      onChange={(e) => setRecordData(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Log action - just uses message */}
+              {executeType === 'log' && (
+                <div className="space-y-2">
+                  <Label htmlFor="log-message">Log Message</Label>
+                  <Textarea
+                    id="log-message"
+                    placeholder="Enter log message..."
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {stepType === 'parallel' && (
+            <div className="space-y-4 rounded-lg border p-4">
+              <h4 className="font-medium">Parallel Configuration</h4>
+
               <div className="space-y-2">
-                <Label htmlFor="execute-config">Configuration (JSON)</Label>
-                <Textarea
-                  id="execute-config"
-                  placeholder='e.g., {"url": "https://api.example.com/notify"}'
-                  value={executeConfig}
-                  onChange={(e) => setExecuteConfig(e.target.value)}
-                  rows={4}
-                />
+                <Label htmlFor="parallel-strategy">Strategy</Label>
+                <Select
+                  value={parallelStrategy}
+                  onValueChange={(value: any) => setParallelStrategy(value)}
+                >
+                  <SelectTrigger id="parallel-strategy">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_must_pass">All Must Pass</SelectItem>
+                    <SelectItem value="any_can_pass">Any Can Pass</SelectItem>
+                    <SelectItem value="best_effort">Best Effort</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {parallelStrategy === 'all_must_pass' && 'All parallel steps must succeed'}
+                  {parallelStrategy === 'any_can_pass' && 'At least one step must succeed'}
+                  {parallelStrategy === 'best_effort' && 'Continue regardless of failures'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Parallel Steps ({parallelSteps.length})</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddParallelStep}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Step
+                  </Button>
+                </div>
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {parallelSteps.map((pStep, index) => (
+                    <div key={index} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveParallelStep(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-2 grid-cols-2">
+                        <div>
+                          <Label className="text-xs">ID</Label>
+                          <Input
+                            size={1}
+                            value={pStep.id}
+                            onChange={(e) =>
+                              handleUpdateParallelStep(index, { id: e.target.value })
+                            }
+                            placeholder="step_id"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Type</Label>
+                          <Select
+                            value={pStep.type}
+                            onValueChange={(value: any) =>
+                              handleUpdateParallelStep(index, { type: value })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="condition">Condition</SelectItem>
+                              <SelectItem value="action">Action</SelectItem>
+                              <SelectItem value="execute">Execute</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Name (optional)</Label>
+                        <Input
+                          size={1}
+                          className="h-8"
+                          value={pStep.name || ''}
+                          onChange={(e) =>
+                            handleUpdateParallelStep(index, { name: e.target.value })
+                          }
+                          placeholder="Step name"
+                        />
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        Configure full step details by saving and editing in the main workflow builder
+                      </p>
+                    </div>
+                  ))}
+
+                  {parallelSteps.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No parallel steps added yet. Click "Add Step" to create one.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {(stepType === 'parallel' || stepType === 'foreach') && (
+          {stepType === 'foreach' && (
             <div className="space-y-4 rounded-lg border p-4">
-              <h4 className="font-medium">
-                {stepType === 'parallel' ? 'Parallel' : 'For Each'} Configuration
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Advanced configuration for {stepType} steps will be available in a future update.
-              </p>
+              <h4 className="font-medium">For Each Configuration</h4>
+
+              <div className="space-y-2">
+                <Label htmlFor="foreach-items">Items Collection</Label>
+                <Input
+                  id="foreach-items"
+                  placeholder="e.g., {{order.line_items}}"
+                  value={foreachItems}
+                  onChange={(e) => setForeachItems(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variable reference to the collection to iterate over (e.g., {`{{items}}`}, {`{{order.line_items}}`})
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="foreach-item-var">Item Variable Name</Label>
+                <Input
+                  id="foreach-item-var"
+                  placeholder="e.g., item, line_item"
+                  value={foreachItemVar}
+                  onChange={(e) => setForeachItemVar(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variable name to use for each item in the loop (accessible as {`{{item_var_name}}`})
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Loop Steps ({foreachSteps.length})</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddForeachStep}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Step
+                  </Button>
+                </div>
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {foreachSteps.map((fStep, index) => (
+                    <div key={index} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveForeachStep(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-2 grid-cols-2">
+                        <div>
+                          <Label className="text-xs">ID</Label>
+                          <Input
+                            size={1}
+                            value={fStep.id}
+                            onChange={(e) =>
+                              handleUpdateForeachStep(index, { id: e.target.value })
+                            }
+                            placeholder="step_id"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Type</Label>
+                          <Select
+                            value={fStep.type}
+                            onValueChange={(value: any) =>
+                              handleUpdateForeachStep(index, { type: value })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="condition">Condition</SelectItem>
+                              <SelectItem value="action">Action</SelectItem>
+                              <SelectItem value="execute">Execute</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Name (optional)</Label>
+                        <Input
+                          size={1}
+                          className="h-8"
+                          value={fStep.name || ''}
+                          onChange={(e) =>
+                            handleUpdateForeachStep(index, { name: e.target.value })
+                          }
+                          placeholder="Step name"
+                        />
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        Configure full step details by saving and editing in the main workflow builder
+                      </p>
+                    </div>
+                  ))}
+
+                  {foreachSteps.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No loop steps added yet. Click "Add Step" to create one.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

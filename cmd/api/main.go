@@ -176,6 +176,9 @@ func run() error {
 	authService := services.NewAuthService(userRepo, apiKeyRepo, refreshTokenRepo, organizationRepo, jwtManager, log)
 	scheduleService := services.NewScheduleService(scheduleRepo, log)
 
+	// Connect approval service to workflow executor (for create_approval_request actions)
+	executor.SetApprovalService(approvalService)
+
 	// Initialize and start approval expiration worker
 	expirationWorker := workers.NewApprovalExpirationWorker(approvalService, log, cfg.Workers.ApprovalExpirationCheckInterval)
 	workerCtx, cancelWorker := context.WithCancel(context.Background())

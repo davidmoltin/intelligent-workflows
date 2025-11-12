@@ -285,7 +285,7 @@ export function WorkflowDetailPage() {
                         {step.type === 'action' && step.action && (
                           <div className="mt-2 p-2 bg-muted rounded-md">
                             <div className="font-medium">Action:</div>
-                            <div>{step.action.action}</div>
+                            <div>{step.action.type}</div>
                             {step.action.reason && (
                               <div className="text-muted-foreground text-xs">
                                 {step.action.reason}

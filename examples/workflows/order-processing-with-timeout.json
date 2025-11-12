@@ -3,91 +3,90 @@
   "version": "1.0.0",
   "name": "Order Processing with Timeout",
   "description": "Example workflow demonstrating timeout enforcement",
-  "definition": {
-    "timeout": "5m",
-    "trigger": {
-      "type": "event",
-      "event": "order.created"
-    },
-    "context": {
-      "load": ["order.details", "customer.profile"]
-    },
-    "steps": [
-      {
-        "id": "validate-order",
-        "type": "condition",
-        "timeout": "30s",
-        "condition": {
-          "field": "order.total",
-          "operator": "gte",
-          "value": 0
-        },
-        "on_true": "check-fraud",
-        "on_false": "reject-order"
-      },
-      {
-        "id": "check-fraud",
-        "type": "condition",
-        "timeout": "1m",
-        "condition": {
-          "field": "customer.risk_score",
-          "operator": "lt",
-          "value": 70
-        },
-        "on_true": "process-payment",
-        "on_false": "request-manual-review"
-      },
-      {
-        "id": "process-payment",
-        "type": "action",
-        "timeout": "2m",
-        "action": {
-          "action": "execute"
-        },
-        "execute": [
-          {
-            "type": "http_request",
-            "url": "https://payment-gateway.example.com/process",
-            "method": "POST",
-            "headers": {
-              "Content-Type": "application/json"
-            },
-            "body": {
-              "order_id": "${order.id}",
-              "amount": "${order.total}"
-            }
-          },
-          {
-            "type": "notify",
-            "recipients": ["orders@example.com"],
-            "message": "Payment processed for order ${order.id}"
-          }
-        ]
-      },
-      {
-        "id": "request-manual-review",
-        "type": "action",
-        "action": {
-          "action": "block",
-          "reason": "High fraud risk - manual review required"
-        },
-        "execute": [
-          {
-            "type": "notify",
-            "recipients": ["fraud@example.com"],
-            "message": "Order ${order.id} flagged for manual review"
-          }
-        ]
-      },
-      {
-        "id": "reject-order",
-        "type": "action",
-        "action": {
-          "action": "block",
-          "reason": "Invalid order total"
-        }
-      }
-    ]
+  "enabled": true,
+  "tags": ["order", "payment", "timeout-example"],
+  "trigger": {
+    "type": "event",
+    "event": "order.created"
   },
-  "tags": ["order", "payment", "timeout-example"]
+  "timeout": "5m",
+  "context": {
+    "load": ["order.details", "customer.profile"]
+  },
+  "steps": [
+    {
+      "id": "validate-order",
+      "type": "condition",
+      "timeout": "30s",
+      "condition": {
+        "field": "order.total",
+        "operator": "gte",
+        "value": 0
+      },
+      "on_true": "check-fraud",
+      "on_false": "reject-order"
+    },
+    {
+      "id": "check-fraud",
+      "type": "condition",
+      "timeout": "1m",
+      "condition": {
+        "field": "customer.risk_score",
+        "operator": "lt",
+        "value": 70
+      },
+      "on_true": "process-payment",
+      "on_false": "request-manual-review"
+    },
+    {
+      "id": "process-payment",
+      "type": "action",
+      "timeout": "2m",
+      "action": {
+        "type": "execute"
+      },
+      "execute": [
+        {
+          "type": "http_request",
+          "url": "https://payment-gateway.example.com/process",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "order_id": "{{order.id}}",
+            "amount": "{{order.total}}"
+          }
+        },
+        {
+          "type": "notify",
+          "recipients": ["orders@example.com"],
+          "message": "Payment processed for order {{order.id}}"
+        }
+      ]
+    },
+    {
+      "id": "request-manual-review",
+      "type": "action",
+      "action": {
+        "type": "block",
+        "reason": "High fraud risk - manual review required"
+      },
+      "execute": [
+        {
+          "type": "notify",
+          "recipients": ["fraud@example.com"],
+          "message": "Order {{order.id}} flagged for manual review"
+        }
+      ]
+    },
+    {
+      "id": "reject-order",
+      "type": "action",
+      "action": {
+        "type": "block",
+        "reason": "Invalid order total"
+      }
+    }
+  ]
 }

@@ -140,7 +140,7 @@ export function StepBuilder({ steps, onChange }: StepBuilderProps) {
                         </div>
                       )}
                       {step.type === 'action' && step.action && (
-                        <div>Action: {step.action.action}</div>
+                        <div>Action: {step.action.type}</div>
                       )}
                       {step.type === 'execute' && step.execute && (
                         <div>Execute: {step.execute.length} action(s)</div>

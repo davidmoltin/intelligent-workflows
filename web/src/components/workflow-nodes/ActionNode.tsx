@@ -12,12 +12,14 @@ interface ActionNodeProps {
 
 export function ActionNode({ data, selected }: ActionNodeProps) {
   const action = data.step?.action
-  const actionType = action?.action || 'execute'
+  const actionType = action?.type || 'execute'
 
   const icons = {
     allow: CheckCircle,
     block: XCircle,
-    execute: Zap
+    execute: Zap,
+    wait: Zap,
+    require_approval: XCircle
   }
 
   const Icon = icons[actionType as keyof typeof icons] || Zap
@@ -45,7 +47,7 @@ export function ActionNode({ data, selected }: ActionNodeProps) {
           {action && (
             <div className="text-xs text-gray-600 mt-1">
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                {action.action}
+                {action.type}
               </span>
               {action.reason && (
                 <div className="mt-1 truncate text-gray-500">{action.reason}</div>

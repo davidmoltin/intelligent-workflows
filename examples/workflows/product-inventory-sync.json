@@ -19,45 +19,11 @@
   },
   "steps": [
     {
-      "id": "calculate_available_inventory",
-      "type": "execute",
-      "name": "Calculate total available inventory",
-      "action": "function",
-      "function": "sum",
-      "params": {
-        "values": "{{product.inventory_all_warehouses.*.quantity}}"
-      },
-      "output_var": "total_available"
-    },
-    {
-      "id": "calculate_reserved_inventory",
-      "type": "execute",
-      "name": "Calculate reserved inventory from pending orders",
-      "action": "function",
-      "function": "sum",
-      "params": {
-        "values": "{{product.pending_orders.*.quantity}}"
-      },
-      "output_var": "total_reserved"
-    },
-    {
-      "id": "calculate_sellable_inventory",
-      "type": "execute",
-      "name": "Calculate sellable inventory",
-      "action": "function",
-      "function": "subtract",
-      "params": {
-        "a": "{{total_available}}",
-        "b": "{{total_reserved}}"
-      },
-      "output_var": "sellable_quantity"
-    },
-    {
       "id": "check_low_stock",
       "type": "condition",
       "name": "Check if inventory is below reorder point",
       "condition": {
-        "field": "sellable_quantity",
+        "field": "product.available_quantity",
         "operator": "lte",
         "value": "{{product.reorder_settings.reorder_point}}"
       },
@@ -68,7 +34,9 @@
       "id": "trigger_reorder",
       "type": "action",
       "name": "Trigger automatic reorder",
-      "action": "execute",
+      "action": {
+        "type": "execute"
+      },
       "execute": [
         {
           "type": "webhook",
@@ -78,7 +46,7 @@
             "event": "reorder_required",
             "product_id": "{{product.id}}",
             "product_sku": "{{product.sku}}",
-            "current_quantity": "{{sellable_quantity}}",
+            "current_quantity": "{{product.available_quantity}}",
             "reorder_quantity": "{{product.reorder_settings.reorder_quantity}}",
             "supplier_id": "{{product.reorder_settings.preferred_supplier}}"
           }
@@ -86,7 +54,7 @@
         {
           "type": "create_record",
           "entity": "purchase_order",
-          "fields": {
+          "data": {
             "product_id": "{{product.id}}",
             "quantity": "{{product.reorder_settings.reorder_quantity}}",
             "supplier_id": "{{product.reorder_settings.preferred_supplier}}",
@@ -96,15 +64,8 @@
         },
         {
           "type": "notify",
-          "channel": "email",
           "recipients": ["role:inventory_manager"],
-          "template": "low_stock_alert",
-          "data": {
-            "product_name": "{{product.name}}",
-            "product_sku": "{{product.sku}}",
-            "current_quantity": "{{sellable_quantity}}",
-            "reorder_point": "{{product.reorder_settings.reorder_point}}"
-          }
+          "message": "Low stock alert: {{product.name}} ({{product.sku}}) - Current: {{product.available_quantity}}, Reorder point: {{product.reorder_settings.reorder_point}}"
         }
       ],
       "next": "check_oversell_risk"
@@ -114,7 +75,7 @@
       "type": "condition",
       "name": "Check if there's risk of overselling",
       "condition": {
-        "field": "sellable_quantity",
+        "field": "product.available_quantity",
         "operator": "lte",
         "value": 0
       },
@@ -125,13 +86,15 @@
       "id": "prevent_overselling",
       "type": "action",
       "name": "Block further sales of this product",
-      "action": "execute",
+      "action": {
+        "type": "execute"
+      },
       "execute": [
         {
           "type": "update_record",
           "entity": "product",
           "entity_id": "{{product.id}}",
-          "fields": {
+          "data": {
             "available_for_sale": false,
             "out_of_stock": true,
             "updated_at": "{{now}}",
@@ -150,8 +113,7 @@
         },
         {
           "type": "notify",
-          "channel": "slack",
-          "recipients": ["#inventory-alerts"],
+          "recipients": ["slack:#inventory-alerts"],
           "message": "⚠️ Product {{product.sku}} - {{product.name}} is now OUT OF STOCK"
         }
       ],
@@ -161,18 +123,18 @@
       "id": "update_inventory_status",
       "type": "action",
       "name": "Update product inventory status",
-      "action": "execute",
+      "action": {
+        "type": "execute"
+      },
       "execute": [
         {
           "type": "update_record",
           "entity": "product",
           "entity_id": "{{product.id}}",
-          "fields": {
-            "available_quantity": "{{sellable_quantity}}",
+          "data": {
             "available_for_sale": true,
             "out_of_stock": false,
-            "updated_at": "{{now}}",
-            "low_stock": "{{sellable_quantity <= product.reorder_settings.reorder_point}}"
+            "updated_at": "{{now}}"
           }
         },
         {
@@ -183,7 +145,7 @@
             "event": "product_inventory_updated",
             "product_id": "{{product.id}}",
             "product_sku": "{{product.sku}}",
-            "available_quantity": "{{sellable_quantity}}"
+            "available_quantity": "{{product.available_quantity}}"
           }
         }
       ],
@@ -193,10 +155,8 @@
       "id": "allow_workflow",
       "type": "action",
       "name": "Complete workflow successfully",
-      "action": "allow",
-      "metadata": {
-        "final_inventory": "{{sellable_quantity}}",
-        "actions_taken": ["inventory_synced"]
+      "action": {
+        "type": "allow"
       }
     }
   ]
